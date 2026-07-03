@@ -21,7 +21,15 @@ export function DashboardPage() {
     <>
       <PageHeader title="Dashboard" />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Projects" value={data?.project_total ?? "—"} icon={<Boxes className="h-4 w-4" />} />
+        <MetricCard
+          label="Projects"
+          value={
+            <Link className="text-primary transition-colors hover:text-primary-strong hover:underline" to="/projects">
+              {data?.project_total ?? "—"}
+            </Link>
+          }
+          icon={<Boxes className="h-4 w-4" />}
+        />
         <MetricCard label="Deploys today" value={data?.today_deploy_total ?? "—"} icon={<Activity className="h-4 w-4" />} />
         <MetricCard label="Succeeded" value={data?.today_success_total ?? "—"} icon={<CheckCircle2 className="h-4 w-4" />} />
         <MetricCard label="Failed" value={data?.today_failed_total ?? "—"} icon={<XCircle className="h-4 w-4" />} />
