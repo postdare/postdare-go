@@ -1,4 +1,5 @@
 import { mockResponse } from "./mock";
+import { useAuthStore } from "../store/auth";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 const MOCKS_ENABLED = import.meta.env.DEV && import.meta.env.VITE_ENABLE_MOCKS === "true";
@@ -12,6 +13,20 @@ export class APIError extends Error {
   }
 }
 
+function redirectToLoginOnUnauthorized() {
+  const { logout } = useAuthStore.getState();
+  logout();
+
+  if (window.location.pathname === "/login") return;
+
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const loginURL = new URL("/login", window.location.origin);
+  if (currentPath !== "/") {
+    loginURL.searchParams.set("next", currentPath);
+  }
+  window.location.assign(loginURL.toString());
+}
+
 export async function apiRequest<T>(path: string, init: RequestInit = {}, token?: string | null): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
@@ -23,6 +38,9 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, token?
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       const message = json?.error?.message ?? `Request failed with ${res.status}`;
+      if (res.status === 401) {
+        redirectToLoginOnUnauthorized();
+      }
       throw new APIError(res.status, message);
     }
     return json as T;

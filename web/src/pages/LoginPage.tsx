@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { GitBranch } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { login } from "../api/postdareGo";
 import { Button } from "../components/ui/button";
@@ -10,6 +10,7 @@ import { useAuthStore } from "../store/auth";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const setSession = useAuthStore((state) => state.setSession);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -23,7 +24,8 @@ export function LoginPage() {
     try {
       const res = await login(username, password);
       setSession(res.data.token, res.data.user);
-      navigate(res.data.user.must_change_password ? "/change-password" : "/dashboard");
+      const next = searchParams.get("next");
+      navigate(res.data.user.must_change_password ? "/change-password" : next || "/dashboard", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
