@@ -108,13 +108,21 @@ select {
 .report-section { margin-top: 32px; }
 .report-section-title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 15px; font-weight: 600; }
 .issue-row { display: grid; grid-template-columns: 72px 1fr; gap: 16px; padding: 18px 0; }
-.issue-hunk { margin-top: 12px; }
-.issue-hunk > summary { cursor: pointer; user-select: none; color: oklch(var(--muted)); font-size: 12px; }
-.issue-hunk > summary:hover { color: oklch(var(--ink)); }
-.issue-hunk pre { margin-top: 8px; max-width: 100%; overflow: auto; border: 1px solid oklch(var(--border)); border-radius: 10px; background: oklch(var(--surface)); padding: 14px; font-family: theme(fontFamily.mono); font-size: 12px; line-height: 1.65; white-space: pre; }
-.issue-hunk .hunk-meta { color: oklch(var(--muted)); }
-.issue-hunk .hunk-add { color: oklch(var(--success)); }
-.issue-hunk .hunk-del { color: oklch(var(--danger)); }
+.issue-diff { margin-top: 12px; overflow-x: auto; border: 1px solid oklch(var(--border)); border-radius: 10px; background: oklch(var(--surface)); }
+.issue-diff table { width: 100%; border-collapse: collapse; font-family: theme(fontFamily.mono); font-size: 12px; line-height: 1.65; tab-size: 4; }
+.issue-diff td { vertical-align: top; }
+.issue-diff .diff-num { width: 1%; min-width: 28px; padding: 0 6px; text-align: right; white-space: nowrap; color: oklch(var(--muted) / 0.7); user-select: none; }
+.issue-diff .diff-num + .diff-num { border-right: 1px solid oklch(var(--border)); }
+.issue-diff .diff-code { width: 100%; padding: 0 12px 0 8px; white-space: pre; color: oklch(var(--ink)); }
+.issue-diff .diff-marker { display: inline-block; width: 1ch; margin-right: 6px; color: oklch(var(--muted) / 0.6); user-select: none; }
+.issue-diff .diff-meta td { padding: 2px 12px; background: oklch(var(--surface-2)); color: oklch(var(--muted)); }
+.issue-diff .diff-add td { background: oklch(var(--success) / 0.13); }
+.issue-diff .diff-add .diff-num { background: oklch(var(--success) / 0.22); color: oklch(var(--ink) / 0.55); }
+.issue-diff .diff-add .diff-marker { color: oklch(var(--success)); }
+.issue-diff .diff-del td { background: oklch(var(--danger) / 0.12); }
+.issue-diff .diff-del .diff-num { background: oklch(var(--danger) / 0.2); color: oklch(var(--ink) / 0.55); }
+.issue-diff .diff-del .diff-marker { color: oklch(var(--danger)); }
+.issue-diff-note { margin-top: 12px; color: oklch(var(--muted)); font-size: 12px; }
 .report-markdown { max-width: 76ch; color: oklch(var(--ink)); font-size: 14px; line-height: 1.75; }
 .report-markdown h1, .report-markdown h2, .report-markdown h3 { margin: 1.6em 0 .55em; font-weight: 650; line-height: 1.3; text-wrap: balance; }
 .report-markdown h1 { font-size: 22px; } .report-markdown h2 { font-size: 18px; } .report-markdown h3 { font-size: 15px; }
