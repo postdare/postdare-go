@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hellodeveye/postdare-go/internal/model"
+	"github.com/hellodeveye/postdare-go/internal/notifier"
 	"github.com/hellodeveye/postdare-go/internal/util"
 )
 
@@ -69,8 +70,8 @@ func validateProjectStages(stages []model.ProjectStage) error {
 			if st.Enabled && strings.TrimSpace(cfg.Command) == "" {
 				return fmt.Errorf("deploy_stages[%d].config.command is required", i)
 			}
-			if cfg.CaptureAs != "" && cfg.CaptureAs != "report" {
-				return fmt.Errorf("deploy_stages[%d].config.capture_as must be report", i)
+			if cfg.CaptureAs != "" && model.NormalizeReportType(cfg.CaptureAs) == "" {
+				return fmt.Errorf("deploy_stages[%d].config.capture_as must be one of %s", i, strings.Join(model.ReportTypes(), ", "))
 			}
 		case model.ProjectStageTypeHealthCheck:
 			var cfg model.HealthCheckStageConfig
@@ -88,7 +89,7 @@ func validateProjectStages(stages []model.ProjectStage) error {
 			if st.Enabled && strings.TrimSpace(cfg.URL) == "" {
 				return fmt.Errorf("deploy_stages[%d].config.url is required", i)
 			}
-			if cfg.Template != "" && cfg.Template != "dingtalk_text" && cfg.Template != "wecom_text" && cfg.Template != "feishu_text" && cfg.Template != "feishu_report_card" && cfg.Template != "generic_json" {
+			if cfg.Template != "" && !notifier.IsTemplate(cfg.Template) {
 				return fmt.Errorf("deploy_stages[%d].config.template is unsupported", i)
 			}
 		default:

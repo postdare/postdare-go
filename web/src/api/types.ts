@@ -23,7 +23,9 @@ export interface CommandProjectStage extends ProjectStageBase {
   type: "command";
   config: {
     command: string;
-    capture_as?: "report";
+    // The report type this stage captures. "report" is the legacy spelling of
+    // "ai_review" and is still accepted by the server.
+    capture_as?: "ai_review" | "report" | "";
   };
 }
 

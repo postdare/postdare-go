@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hellodeveye/postdare-go/internal/model"
+	"github.com/hellodeveye/postdare-go/internal/notifier"
 	"github.com/hellodeveye/postdare-go/internal/runner"
 )
 
@@ -26,15 +27,15 @@ func (s *Service) runOutboundWebhookStage(ctx context.Context, project model.Pro
 	cfg.URL = webhookURL
 	var report *model.Report
 	reportURL := ""
-	if cfg.Template == "feishu_report_card" {
+	if cfg.Template == notifier.TemplateFeishuReportCard {
 		var found model.Report
 		if queryErr := s.DB.WithContext(ctx).Where("task_id = ? AND type = ?", task.ID, model.ReportTypeAIReview).First(&found).Error; queryErr == nil {
-			shared, _, url, shareErr := s.RotateReportShare(ctx, found.ID)
-			if shareErr == nil {
+			report = &found
+			// Ensure, never rotate: two notification stages on one task must link
+			// to the same report, and the earlier card's button must keep working.
+			if shared, url, shareErr := s.EnsureReportShare(ctx, found.ID); shareErr == nil {
 				report = &shared
 				reportURL = url
-			} else {
-				report = &found
 			}
 		}
 	}

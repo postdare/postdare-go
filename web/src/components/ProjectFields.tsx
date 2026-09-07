@@ -216,8 +216,8 @@ function StageEditor({ stages, onChange }: { stages: ProjectStage[]; onChange: (
                       <label className="flex items-center gap-1.5">
                         <input
                           type="checkbox"
-                          checked={stage.config.capture_as === "report"}
-                          onChange={(e) => updateConfig(index, { capture_as: e.target.checked ? "report" : "" })}
+                          checked={Boolean(stage.config.capture_as)}
+                          onChange={(e) => updateConfig(index, { capture_as: e.target.checked ? "ai_review" : "" })}
                           className="h-4 w-4 accent-primary"
                         />
                         Capture stdout as AI review report
