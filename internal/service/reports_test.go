@@ -251,3 +251,59 @@ func TestEnsureReportShareRecoversFromSecretRotation(t *testing.T) {
 		t.Fatal("ensure handed out a link the public endpoint would reject")
 	}
 }
+
+// Diff excerpts are evidence for one finding, so they are capped per issue and
+// across the report -- and trimming a review's evidence must never discard the
+// review itself.
+func TestDiffHunksAreCappedNotRejected(t *testing.T) {
+	long := strings.TrimSuffix(strings.Repeat("+line\n", maxIssueDiffHunkLines+20), "\n")
+	issues := normalizeReportIssues([]model.ReportIssue{
+		{Severity: "high", Title: "long", DiffHunk: long},
+		{Severity: "low", Title: "short", DiffHunk: "@@ -1 +1 @@\n-a\n+b"},
+		{Severity: "low", Title: "none"},
+	})
+	if len(issues) != 3 {
+		t.Fatalf("issues must survive trimming, got %d", len(issues))
+	}
+	if lines := strings.Split(issues[0].DiffHunk, "\n"); len(lines) != maxIssueDiffHunkLines+1 {
+		t.Fatalf("over-long hunk should be cut to the cap plus a marker, got %d lines", len(lines))
+	}
+	if !strings.HasSuffix(issues[0].DiffHunk, "... truncated") {
+		t.Fatal("a cut excerpt must say it was cut")
+	}
+	if issues[1].DiffHunk != "@@ -1 +1 @@\n-a\n+b" {
+		t.Fatalf("a hunk within the cap must be kept verbatim: %q", issues[1].DiffHunk)
+	}
+	if issues[2].DiffHunk != "" {
+		t.Fatal("an issue without an excerpt must stay without one")
+	}
+}
+
+func TestDiffHunkBudgetDropsLaterExcerpts(t *testing.T) {
+	// Each excerpt is within the per-issue cap but together they overrun the
+	// report budget, so the later ones lose their excerpt and keep their finding.
+	wide := strings.TrimSuffix(strings.Repeat(strings.Repeat("x", 900)+"\n", 30), "\n")
+	issues := make([]model.ReportIssue, 5)
+	for i := range issues {
+		issues[i] = model.ReportIssue{Severity: "high", Title: "issue", DiffHunk: wide}
+	}
+	normalized := normalizeReportIssues(issues)
+	total := 0
+	for _, issue := range normalized {
+		total += len(issue.DiffHunk)
+	}
+	if total > maxReportDiffHunkBytes {
+		t.Fatalf("excerpts must stay within the report budget, got %d bytes", total)
+	}
+	if normalized[0].DiffHunk == "" {
+		t.Fatal("the budget should be spent on the earliest issues")
+	}
+	if normalized[len(normalized)-1].DiffHunk != "" {
+		t.Fatal("excerpts past the budget must be dropped")
+	}
+	for _, issue := range normalized {
+		if issue.Title != "issue" {
+			t.Fatal("dropping an excerpt must not drop the finding")
+		}
+	}
+}

@@ -216,6 +216,11 @@ type ReportIssue struct {
 	Trigger    string `json:"trigger,omitempty"`
 	Impact     string `json:"impact,omitempty"`
 	Suggestion string `json:"suggestion,omitempty"`
+	// DiffHunk is the excerpt of the reviewed diff that the finding refers to.
+	// A capture script must cut it from the real diff rather than let the model
+	// reproduce it: a finding is only evidence if the code beside it is the code
+	// that was actually committed.
+	DiffHunk string `json:"diff_hunk,omitempty"`
 }
 
 // Report stores a structured artifact produced by a deploy stage. The raw share

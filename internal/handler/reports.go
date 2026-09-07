@@ -130,9 +130,23 @@ func (h *Handler) GetPublicReport(c *gin.Context) {
 		util.Error(c, http.StatusInternalServerError, "REPORT_LOAD_FAILED", "Failed to load report", nil)
 		return
 	}
+	// The share link is a bearer token that travels through chat: whoever holds it
+	// reads this page. Findings and file paths are the point of sharing; the
+	// reviewed source is not, so excerpts stay on the authenticated endpoints and a
+	// leaked link never becomes a source disclosure.
+	response.Issues = withoutDiffHunks(response.Issues)
 	c.Header("Cache-Control", "no-store")
 	c.Header("Referrer-Policy", "no-referrer")
 	util.OK(c, response)
+}
+
+func withoutDiffHunks(issues []model.ReportIssue) []model.ReportIssue {
+	stripped := make([]model.ReportIssue, len(issues))
+	copy(stripped, issues)
+	for i := range stripped {
+		stripped[i].DiffHunk = ""
+	}
+	return stripped
 }
 
 func (h *Handler) loadReport(c *gin.Context) (model.Report, bool) {

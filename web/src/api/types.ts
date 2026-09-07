@@ -120,6 +120,10 @@ export interface ReportIssue {
   trigger?: string;
   impact?: string;
   suggestion?: string;
+  // Excerpt of the reviewed diff, cut from the real diff by the capture script.
+  // The public report endpoint withholds it, so a shared link carries findings
+  // without carrying source.
+  diff_hunk?: string;
 }
 
 export interface Report {

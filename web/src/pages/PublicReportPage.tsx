@@ -154,9 +154,30 @@ function IssueRow({ issue }: { issue: ReportIssue }) {
           {issue.impact ? <IssueDetail label="Impact" value={issue.impact} /> : null}
           {issue.suggestion ? <IssueDetail label="Suggestion" value={issue.suggestion} /> : null}
         </dl>
+        {issue.diff_hunk ? <DiffHunk hunk={issue.diff_hunk} /> : null}
       </div>
     </article>
   );
+}
+
+function DiffHunk({ hunk }: { hunk: string }) {
+  return (
+    <details className="issue-hunk">
+      <summary>Diff excerpt</summary>
+      <pre>
+        {hunk.split("\n").map((line, index) => (
+          <span key={index} className={diffLineClass(line)}>{line}{"\n"}</span>
+        ))}
+      </pre>
+    </details>
+  );
+}
+
+function diffLineClass(line: string) {
+  if (line.startsWith("@@")) return "hunk-meta";
+  if (line.startsWith("+")) return "hunk-add";
+  if (line.startsWith("-")) return "hunk-del";
+  return undefined;
 }
 
 function IssueDetail({ label, value }: { label: string; value: string }) {

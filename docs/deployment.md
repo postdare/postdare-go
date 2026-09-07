@@ -96,6 +96,18 @@ Every command stage -- not only report stages -- receives `POSTDARE_TASK_ID`,
 manual and MCP deploys use `HEAD^..HEAD`. Report-stage failures never change the
 deployment result.
 
+Each issue may carry a `diff_hunk`: the excerpt of the reviewed diff the finding
+refers to, which makes a finding checkable instead of an assertion to take on trust.
+A capture script must cut it from the real diff by the reported location rather than
+let the model reproduce it, or the excerpt can be hallucinated and is then worse than
+none. Excerpts are capped at 40 lines each and 64 KiB per report; over-long ones are
+trimmed and marked, never rejected, so evidence limits never cost a review.
+
+`GET /api/v1/public/reports/{report_id}` withholds `diff_hunk`. A share link is a
+bearer token that gets forwarded through chat, and findings and file paths are the
+point of sharing while the reviewed source is not. The authenticated endpoints serve
+excerpts in full.
+
 Install the Xianhu example script at the stable server path:
 
 ```bash

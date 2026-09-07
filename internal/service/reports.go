@@ -16,6 +16,14 @@ import (
 
 const maxReportOutputBytes int64 = 2 * 1024 * 1024
 
+const (
+	// A diff excerpt exists to make one finding checkable, not to carry the diff.
+	// Over-long excerpts are trimmed rather than rejected, so an otherwise good
+	// review is never thrown away over its evidence.
+	maxIssueDiffHunkLines  = 40
+	maxReportDiffHunkBytes = 64 * 1024
+)
+
 type capturedReport struct {
 	ReportType   string              `json:"report_type"`
 	Status       string              `json:"status"`
@@ -186,10 +194,36 @@ func normalizeReportIssues(issues []model.ReportIssue) []model.ReportIssue {
 	if issues == nil {
 		return []model.ReportIssue{}
 	}
+	budget := maxReportDiffHunkBytes
 	for i := range issues {
 		issues[i].Severity = model.NormalizeSeverity(issues[i].Severity)
+		issues[i].DiffHunk = trimDiffHunk(issues[i].DiffHunk, &budget)
 	}
 	return issues
+}
+
+// trimDiffHunk caps one excerpt at maxIssueDiffHunkLines and draws what remains
+// from the report-wide budget, dropping later excerpts once it is spent. Trimming
+// is marked so a reader never mistakes a cut excerpt for the whole change.
+func trimDiffHunk(hunk string, budget *int) string {
+	if strings.TrimSpace(hunk) == "" {
+		return ""
+	}
+	lines := strings.Split(hunk, "\n")
+	truncated := false
+	if len(lines) > maxIssueDiffHunkLines {
+		lines = lines[:maxIssueDiffHunkLines]
+		truncated = true
+	}
+	trimmed := strings.Join(lines, "\n")
+	if len(trimmed) > *budget {
+		return ""
+	}
+	*budget -= len(trimmed)
+	if truncated {
+		trimmed += "\n... truncated"
+	}
+	return trimmed
 }
 
 func (s *Service) saveReport(ctx context.Context, report *model.Report) error {
