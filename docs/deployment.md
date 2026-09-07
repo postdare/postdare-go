@@ -126,13 +126,13 @@ a share link is a bearer token, so whoever it reaches -- including anyone it is
 forwarded to -- reads the excerpted source. Treat a report link like the diff itself,
 and revoke one that has spread (`DELETE /api/v1/reports/{report_id}/share`).
 
-Install the Xianhu example script at the stable server path:
+Install the example script at the stable server path:
 
 ```bash
-sudo install -m 0755 examples/ai-review-xianhu /opt/postdare-go/bin/ai-review-xianhu
+sudo install -m 0755 examples/ai-review /opt/postdare-go/bin/ai-review
 ```
 
-Configure the command as `/opt/postdare-go/bin/ai-review-xianhu`, set
+Configure the command as `/opt/postdare-go/bin/ai-review`, set
 `capture_as: ai_review`, `run_when: always`, and keep the Feishu outbound stage after it
 with template `feishu_report_card`. Set `server.public_url` to the externally reachable
 HTTPS origin so the card can link to `/reports/{report_id}`.

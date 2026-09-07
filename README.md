@@ -196,7 +196,7 @@ Git 平台：github
   4. build：cd /data/repos/my-app && mvn package -DskipTests
   5. deploy：bash /data/apps/my-app/deploy.sh
   6. health_check：http://127.0.0.1:8080/actuator/health
-  7. ai_review：always，/opt/postdare-go/bin/ai-review-xianhu，capture_as=report
+  7. ai_review：always，/opt/postdare-go/bin/ai-review，capture_as=ai_review
   8. outbound_webhook：always，https://open.feishu.cn/open-apis/bot/v2/hook/xxx，feishu_report_card
 回滚命令：bash /data/apps/my-app/rollback.sh
 应用日志路径：/data/apps/my-app/logs/app.log
