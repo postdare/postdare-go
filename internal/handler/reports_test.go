@@ -141,12 +141,12 @@ func TestPublicReportAcceptsPreUpgradeToken(t *testing.T) {
 	}
 }
 
-// A share link is a bearer token that gets forwarded; it must not carry the
-// reviewed source. The authenticated endpoint still serves the excerpts.
-func TestPublicReportWithholdsDiffHunks(t *testing.T) {
+// A shared report carries its diff excerpts: a reader without repo access is
+// exactly who needs the code beside the finding.
+func TestPublicReportServesDiffHunks(t *testing.T) {
 	database, router, report := setupReportHandlerTest(t)
 	if err := database.Model(&model.Report{}).Where("id = ?", report.ID).Updates(map[string]interface{}{
-		"issues": `[{"severity":"high","title":"race","location":"main.go:9","diff_hunk":"@@ -1 +1 @@\n-old\n+secret = \"leaked\""}]`,
+		"issues": `[{"severity":"high","title":"race","location":"main.go:9","diff_hunk":"@@ -1 +1 @@\n-old\n+new"}]`,
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -157,10 +157,7 @@ func TestPublicReportWithholdsDiffHunks(t *testing.T) {
 	if public.Code != http.StatusOK {
 		t.Fatalf("public report: %d %s", public.Code, public.Body.String())
 	}
-	if strings.Contains(public.Body.String(), "diff_hunk") || strings.Contains(public.Body.String(), "leaked") {
-		t.Fatalf("the shared report must not carry reviewed source: %s", public.Body.String())
-	}
-	if !strings.Contains(public.Body.String(), "race") {
-		t.Fatal("withholding the excerpt must not withhold the finding")
+	if !strings.Contains(public.Body.String(), "diff_hunk") || !strings.Contains(public.Body.String(), "+new") {
+		t.Fatalf("the shared report must carry the excerpt: %s", public.Body.String())
 	}
 }

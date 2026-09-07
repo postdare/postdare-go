@@ -103,10 +103,11 @@ let the model reproduce it, or the excerpt can be hallucinated and is then worse
 none. Excerpts are capped at 40 lines each and 64 KiB per report; over-long ones are
 trimmed and marked, never rejected, so evidence limits never cost a review.
 
-`GET /api/v1/public/reports/{report_id}` withholds `diff_hunk`. A share link is a
-bearer token that gets forwarded through chat, and findings and file paths are the
-point of sharing while the reviewed source is not. The authenticated endpoints serve
-excerpts in full.
+Excerpts are served on the shared report as well, since a reader without repo access
+is exactly who needs the code beside the finding. Note what that means operationally:
+a share link is a bearer token, so whoever it reaches -- including anyone it is
+forwarded to -- reads the excerpted source. Treat a report link like the diff itself,
+and revoke one that has spread (`DELETE /api/v1/reports/{report_id}/share`).
 
 Install the Xianhu example script at the stable server path:
 
