@@ -40,7 +40,8 @@ export function PublicReportPage() {
     retry: false
   });
   const data = report.data?.data;
-  const counts = countIssues(data?.issues ?? []);
+  const issues = data?.issues ?? [];
+  const counts = countIssues(issues);
 
   if (!token) {
     return <ReportMessage title="Report link is incomplete" body="Open the complete share link from your deployment notification." />;
@@ -92,11 +93,11 @@ export function PublicReportPage() {
           </div>
         </section>
 
-        {data.issues.length > 0 ? (
+        {issues.length > 0 ? (
           <section className="report-section" aria-labelledby="report-issues">
             <h2 id="report-issues" className="report-section-title"><ShieldAlert className="h-4 w-4" /> Findings</h2>
             <div className="divide-y divide-border border-y border-border">
-              {data.issues.map((issue, index) => <IssueRow key={`${issue.title}-${index}`} issue={issue} />)}
+              {issues.map((issue, index) => <IssueRow key={`${issue.title}-${index}`} issue={issue} />)}
             </div>
           </section>
         ) : null}

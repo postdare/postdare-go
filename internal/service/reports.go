@@ -18,10 +18,15 @@ const maxReportOutputBytes int64 = 2 * 1024 * 1024
 
 const (
 	// A diff excerpt exists to make one finding checkable, not to carry the diff.
-	// Over-long excerpts are trimmed rather than rejected, so an otherwise good
-	// review is never thrown away over its evidence.
+	// Neither limit ever rejects a review or a finding: an excerpt past the line
+	// cap is cut, and one the report budget cannot hold is replaced by a note
+	// saying so, because an excerpt that vanishes silently reads as a finding that
+	// never had one.
 	maxIssueDiffHunkLines  = 40
 	maxReportDiffHunkBytes = 64 * 1024
+
+	diffHunkTruncatedMarker = "... truncated"
+	diffHunkOmittedMarker   = "... excerpt omitted: report excerpt budget reached"
 )
 
 type capturedReport struct {
@@ -64,6 +69,10 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 		CommitID:       target,
 		BeforeCommitID: base,
 		Status:         model.ReportFailed,
+		// A failed or skipped capture never reaches normalizeReportIssues, so seed
+		// the list here: a nil slice persists as JSON null and clients that expect
+		// an array break on it.
+		Issues: []model.ReportIssue{},
 	}
 	// fail records why the capture produced no report, on the Report row and in
 	// the deploy log, then closes the stage.
@@ -98,7 +107,7 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 	}
 	var captured capturedReport
 	if err := json.Unmarshal(raw, &captured); err != nil {
-		return fail(fmt.Errorf("report command returned invalid JSON: %w", err))
+		return fail(fmt.Errorf("report command returned invalid JSON: %w; output began %s", err, capturePreview(raw)))
 	}
 	if err := validateCapturedReport(captured, reportType); err != nil {
 		return fail(err)
@@ -127,6 +136,22 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 	}
 	runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "report captured")
 	return stageOK, nil
+}
+
+// capturePreview quotes the head of a capture's stdout for an error message.
+// Without it an operator sees only how the parser objected and not what the
+// script actually printed, which is the part that says where to look.
+func capturePreview(raw []byte) string {
+	const maxPreviewRunes = 200
+	text := strings.TrimSpace(string(raw))
+	if text == "" {
+		return "(no output)"
+	}
+	runes := []rune(text)
+	if len(runes) > maxPreviewRunes {
+		return strconv.Quote(string(runes[:maxPreviewRunes]) + "…")
+	}
+	return strconv.Quote(text)
 }
 
 func validateCapturedReport(report capturedReport, reportType string) error {
@@ -203,8 +228,9 @@ func normalizeReportIssues(issues []model.ReportIssue) []model.ReportIssue {
 }
 
 // trimDiffHunk caps one excerpt at maxIssueDiffHunkLines and draws what remains
-// from the report-wide budget, dropping later excerpts once it is spent. Trimming
-// is marked so a reader never mistakes a cut excerpt for the whole change.
+// from the report-wide budget. Both cuts are marked: a reader must be able to
+// tell a shortened excerpt, and an omitted one, from a finding that simply came
+// without evidence. Only an issue that carried no excerpt gets an empty string.
 func trimDiffHunk(hunk string, budget *int) string {
 	if strings.TrimSpace(hunk) == "" {
 		return ""
@@ -217,11 +243,11 @@ func trimDiffHunk(hunk string, budget *int) string {
 	}
 	trimmed := strings.Join(lines, "\n")
 	if len(trimmed) > *budget {
-		return ""
+		return diffHunkOmittedMarker
 	}
 	*budget -= len(trimmed)
 	if truncated {
-		trimmed += "\n... truncated"
+		trimmed += "\n" + diffHunkTruncatedMarker
 	}
 	return trimmed
 }

@@ -1,8 +1,9 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 WEB_DIST := internal/webui/dist
 LDFLAGS := -X main.version=$(VERSION)
+PREFIX ?= /opt/postdare-go
 
-.PHONY: web build release test
+.PHONY: web build release test install-scripts
 
 web:
 	cd web && npm ci && npm run build
@@ -23,3 +24,10 @@ release: web
 test:
 	go vet ./...
 	go test ./...
+
+# Capture scripts ship with the binary that reads their output, so a release can
+# install both and the pair never drifts. Machine-specific settings stay out of
+# the script: see /etc/postdare-go/ai-review.env.
+install-scripts:
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 0755 examples/ai-review $(DESTDIR)$(PREFIX)/bin/ai-review

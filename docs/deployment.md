@@ -96,12 +96,29 @@ Every command stage -- not only report stages -- receives `POSTDARE_TASK_ID`,
 manual and MCP deploys use `HEAD^..HEAD`. Report-stage failures never change the
 deployment result.
 
+A capture script must print the report object on stdout. The example script tolerates
+a model that wraps it in a code fence or adds a sentence after it, extracting the
+outermost JSON object. **It requires python3**: the server cannot tell an excerpt cut
+from the diff from one the model invented, so it trusts whatever the script sends,
+and that trust only holds if the script never forwards output it did not process.
+Without python3 the example script reports a failure instead of passing the model's
+output through -- install python3 wherever it runs. When output does not parse, the
+failure carries the first 200 characters of what was printed, which is usually enough
+to see why.
+
+The same reasoning applies to any capture script you write: strip whatever `diff_hunk`
+the model supplied before attaching one you cut yourself, since a hallucinated excerpt
+presented as evidence is worse than no excerpt.
+
 Each issue may carry a `diff_hunk`: the excerpt of the reviewed diff the finding
 refers to, which makes a finding checkable instead of an assertion to take on trust.
 A capture script must cut it from the real diff by the reported location rather than
 let the model reproduce it, or the excerpt can be hallucinated and is then worse than
-none. Excerpts are capped at 40 lines each and 64 KiB per report; over-long ones are
-trimmed and marked, never rejected, so evidence limits never cost a review.
+none. Excerpts are capped at 40 lines each and 64 KiB per report. Neither limit discards a
+review or a finding, and neither cut is silent: an excerpt past the line cap ends with
+`... truncated`, and one the report budget cannot hold is replaced by
+`... excerpt omitted: report excerpt budget reached`, so a reader can always tell a
+shortened or omitted excerpt from a finding that came without one.
 
 Excerpts are served on the shared report as well, since a reader without repo access
 is exactly who needs the code beside the finding. Note what that means operationally:
@@ -109,13 +126,38 @@ a share link is a bearer token, so whoever it reaches -- including anyone it is
 forwarded to -- reads the excerpted source. Treat a report link like the diff itself,
 and revoke one that has spread (`DELETE /api/v1/reports/{report_id}/share`).
 
-Install the Xianhu example script at the stable server path:
+Install the example script at the stable server path:
 
 ```bash
-sudo install -m 0755 examples/ai-review-xianhu /opt/postdare-go/bin/ai-review-xianhu
+sudo make install-scripts            # or PREFIX=/somewhere make install-scripts
 ```
 
-Configure the command as `/opt/postdare-go/bin/ai-review-xianhu`, set
+Run it from the release that built the binary. A capture script and the server that
+reads its output are versioned together, and they drift silently in both directions:
+an older script simply omits `diff_hunk`, and a newer one against an older server has
+the field dropped as an unknown field. Neither reports an error, so install the pair
+together.
+
+The script holds no machine-specific values, so a release can ship it unchanged.
+Point it at the reviewer through `/etc/postdare-go/ai-review.env` (see
+`examples/ai-review.env`), or set the same variables in the stage command:
+
+```bash
+POSTDARE_REVIEW_PI_BIN=/path/to/pi      # defaults to "pi" on PATH
+POSTDARE_REVIEW_MODEL=litellm/glm-5.3-flash
+POSTDARE_REVIEW_SKILL_DIR=/path/to/skill   # optional; omitted means no --skill
+```
+
+The config file wins over the environment, so leave a value out of the file to set it
+per stage. Pin `POSTDARE_REVIEW_PI_BIN` only when the binary is off PATH: an nvm path
+carries a Node version and breaks on the next upgrade, and the failure surfaces as a
+report that could not run rather than an obvious error.
+
+Every refusal to run -- no reviewer, no python3, a missing skill directory, an
+unparseable commit range -- is reported as a failed report rather than a non-zero
+exit, so the reason is readable in the UI instead of buried in the deploy log.
+
+Configure the command as `/opt/postdare-go/bin/ai-review`, set
 `capture_as: ai_review`, `run_when: always`, and keep the Feishu outbound stage after it
 with template `feishu_report_card`. Set `server.public_url` to the externally reachable
 HTTPS origin so the card can link to `/reports/{report_id}`.
