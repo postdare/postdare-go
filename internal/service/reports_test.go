@@ -268,7 +268,7 @@ func TestDiffHunksAreCappedNotRejected(t *testing.T) {
 	if lines := strings.Split(issues[0].DiffHunk, "\n"); len(lines) != maxIssueDiffHunkLines+1 {
 		t.Fatalf("over-long hunk should be cut to the cap plus a marker, got %d lines", len(lines))
 	}
-	if !strings.HasSuffix(issues[0].DiffHunk, "... truncated") {
+	if !strings.HasSuffix(issues[0].DiffHunk, diffHunkTruncatedMarker) {
 		t.Fatal("a cut excerpt must say it was cut")
 	}
 	if issues[1].DiffHunk != "@@ -1 +1 @@\n-a\n+b" {
@@ -288,18 +288,21 @@ func TestDiffHunkBudgetDropsLaterExcerpts(t *testing.T) {
 		issues[i] = model.ReportIssue{Severity: "high", Title: "issue", DiffHunk: wide}
 	}
 	normalized := normalizeReportIssues(issues)
-	total := 0
+	carried := 0
 	for _, issue := range normalized {
-		total += len(issue.DiffHunk)
+		if issue.DiffHunk != diffHunkOmittedMarker {
+			carried += len(issue.DiffHunk)
+		}
 	}
-	if total > maxReportDiffHunkBytes {
-		t.Fatalf("excerpts must stay within the report budget, got %d bytes", total)
+	if carried > maxReportDiffHunkBytes {
+		t.Fatalf("excerpts must stay within the report budget, got %d bytes", carried)
 	}
-	if normalized[0].DiffHunk == "" {
+	if normalized[0].DiffHunk == "" || normalized[0].DiffHunk == diffHunkOmittedMarker {
 		t.Fatal("the budget should be spent on the earliest issues")
 	}
-	if normalized[len(normalized)-1].DiffHunk != "" {
-		t.Fatal("excerpts past the budget must be dropped")
+	last := normalized[len(normalized)-1].DiffHunk
+	if last != diffHunkOmittedMarker {
+		t.Fatalf("an excerpt past the budget must say it was omitted, got %q", last)
 	}
 	for _, issue := range normalized {
 		if issue.Title != "issue" {

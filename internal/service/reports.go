@@ -18,10 +18,15 @@ const maxReportOutputBytes int64 = 2 * 1024 * 1024
 
 const (
 	// A diff excerpt exists to make one finding checkable, not to carry the diff.
-	// Over-long excerpts are trimmed rather than rejected, so an otherwise good
-	// review is never thrown away over its evidence.
+	// Neither limit ever rejects a review or a finding: an excerpt past the line
+	// cap is cut, and one the report budget cannot hold is replaced by a note
+	// saying so, because an excerpt that vanishes silently reads as a finding that
+	// never had one.
 	maxIssueDiffHunkLines  = 40
 	maxReportDiffHunkBytes = 64 * 1024
+
+	diffHunkTruncatedMarker = "... truncated"
+	diffHunkOmittedMarker   = "... excerpt omitted: report excerpt budget reached"
 )
 
 type capturedReport struct {
@@ -223,8 +228,9 @@ func normalizeReportIssues(issues []model.ReportIssue) []model.ReportIssue {
 }
 
 // trimDiffHunk caps one excerpt at maxIssueDiffHunkLines and draws what remains
-// from the report-wide budget, dropping later excerpts once it is spent. Trimming
-// is marked so a reader never mistakes a cut excerpt for the whole change.
+// from the report-wide budget. Both cuts are marked: a reader must be able to
+// tell a shortened excerpt, and an omitted one, from a finding that simply came
+// without evidence. Only an issue that carried no excerpt gets an empty string.
 func trimDiffHunk(hunk string, budget *int) string {
 	if strings.TrimSpace(hunk) == "" {
 		return ""
@@ -237,11 +243,11 @@ func trimDiffHunk(hunk string, budget *int) string {
 	}
 	trimmed := strings.Join(lines, "\n")
 	if len(trimmed) > *budget {
-		return ""
+		return diffHunkOmittedMarker
 	}
 	*budget -= len(trimmed)
 	if truncated {
-		trimmed += "\n... truncated"
+		trimmed += "\n" + diffHunkTruncatedMarker
 	}
 	return trimmed
 }

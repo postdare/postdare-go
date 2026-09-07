@@ -101,10 +101,37 @@ def extract_json(text):
     raise ValueError('no JSON object in model output')
 
 
-report = extract_json(sys.stdin.read())
+def fail(reason):
+    """Emit a well-formed failed report rather than passing output through.
+
+    The server cannot tell a real excerpt from one the model invented, so it
+    trusts whatever this script sends. That trust only holds if the script never
+    forwards output it did not process: a report is worth losing to keep
+    fabricated code from being presented as evidence.
+    """
+    json.dump({
+        'report_type': 'ai_review',
+        'status': 'failed',
+        'conclusion': 'enrichment_failed',
+        'summary': 'AI 审查结果无法处理，未生成报告。',
+        'issues': [],
+        'markdown': '',
+        'error_message': reason,
+    }, sys.stdout, ensure_ascii=False)
+
+
+raw = sys.stdin.read()
+try:
+    report = extract_json(raw)
+except ValueError as error:
+    fail('%s; output began %r' % (error, raw.strip()[:200]))
+    sys.exit(0)
+
 files = parse_diff(sys.argv[1])
 for issue in report.get('issues') or []:
     if isinstance(issue, dict):
+        # Drop anything the model supplied here before attaching the real hunk:
+        # only an excerpt cut from the diff below may reach the report.
         issue.pop('diff_hunk', None)
         hunk = find_hunk(files, issue.get('location', ''))
         if hunk:
@@ -124,11 +151,12 @@ REPORT="$("$PI_BIN" \
   "@$DIFF_FILE" \
   "$PROMPT")"
 
-# Attaching excerpts is best effort: without python3, or on output the model did
-# not format as JSON, the report is still worth delivering unchanged.
-if command -v python3 >/dev/null 2>&1 &&
-  ENRICHED="$(printf '%s' "$REPORT" | python3 -c "$ATTACH_HUNKS" "$DIFF_FILE" 2>/dev/null)"; then
-  printf '%s\n' "$ENRICHED"
-else
-  printf '%s\n' "$REPORT"
+# Enrichment is mandatory, not best effort. Passing the model's output straight
+# through would let a diff_hunk it invented reach the report as evidence, which
+# is the one thing this pipeline must not do.
+if ! command -v python3 >/dev/null 2>&1; then
+  printf '%s\n' '{"report_type":"ai_review","status":"failed","conclusion":"enrichment_unavailable","summary":"缺少 python3，无法从真实 diff 截取代码摘录。","issues":[],"markdown":"","error_message":"python3 is required to attach diff excerpts"}'
+  exit 0
 fi
+printf '%s' "$REPORT" | python3 -c "$ATTACH_HUNKS" "$DIFF_FILE"
+printf '\n'

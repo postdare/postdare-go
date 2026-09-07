@@ -98,17 +98,27 @@ deployment result.
 
 A capture script must print the report object on stdout. The example script tolerates
 a model that wraps it in a code fence or adds a sentence after it, extracting the
-outermost JSON object; without python3 on the server it can only pass the model's
-output through, so install python3 where the example script runs. When the output
-still does not parse, the failure is recorded on the report with the first 200
-characters of what was actually printed, which is usually enough to see why.
+outermost JSON object. **It requires python3**: the server cannot tell an excerpt cut
+from the diff from one the model invented, so it trusts whatever the script sends,
+and that trust only holds if the script never forwards output it did not process.
+Without python3 the example script reports a failure instead of passing the model's
+output through -- install python3 wherever it runs. When output does not parse, the
+failure carries the first 200 characters of what was printed, which is usually enough
+to see why.
+
+The same reasoning applies to any capture script you write: strip whatever `diff_hunk`
+the model supplied before attaching one you cut yourself, since a hallucinated excerpt
+presented as evidence is worse than no excerpt.
 
 Each issue may carry a `diff_hunk`: the excerpt of the reviewed diff the finding
 refers to, which makes a finding checkable instead of an assertion to take on trust.
 A capture script must cut it from the real diff by the reported location rather than
 let the model reproduce it, or the excerpt can be hallucinated and is then worse than
-none. Excerpts are capped at 40 lines each and 64 KiB per report; over-long ones are
-trimmed and marked, never rejected, so evidence limits never cost a review.
+none. Excerpts are capped at 40 lines each and 64 KiB per report. Neither limit discards a
+review or a finding, and neither cut is silent: an excerpt past the line cap ends with
+`... truncated`, and one the report budget cannot hold is replaced by
+`... excerpt omitted: report excerpt budget reached`, so a reader can always tell a
+shortened or omitted excerpt from a finding that came without one.
 
 Excerpts are served on the shared report as well, since a reader without repo access
 is exactly who needs the code beside the finding. Note what that means operationally:
