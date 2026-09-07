@@ -12,6 +12,7 @@ import { ProjectFormPage } from "../pages/ProjectFormPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { WebhookEventsPage } from "../pages/WebhookEventsPage";
+import { PublicReportPage } from "../pages/PublicReportPage";
 
 function Protected() {
   const token = useAuthStore((state) => state.token);
@@ -26,6 +27,7 @@ function Protected() {
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
+  { path: "/reports/:reportId", element: <PublicReportPage /> },
   {
     path: "/",
     element: <Protected />,

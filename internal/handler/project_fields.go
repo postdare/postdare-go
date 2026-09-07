@@ -69,6 +69,9 @@ func validateProjectStages(stages []model.ProjectStage) error {
 			if st.Enabled && strings.TrimSpace(cfg.Command) == "" {
 				return fmt.Errorf("deploy_stages[%d].config.command is required", i)
 			}
+			if cfg.CaptureAs != "" && cfg.CaptureAs != "report" {
+				return fmt.Errorf("deploy_stages[%d].config.capture_as must be report", i)
+			}
 		case model.ProjectStageTypeHealthCheck:
 			var cfg model.HealthCheckStageConfig
 			if err := parseStageConfig(st, &cfg); err != nil {
@@ -85,7 +88,7 @@ func validateProjectStages(stages []model.ProjectStage) error {
 			if st.Enabled && strings.TrimSpace(cfg.URL) == "" {
 				return fmt.Errorf("deploy_stages[%d].config.url is required", i)
 			}
-			if cfg.Template != "" && cfg.Template != "dingtalk_text" && cfg.Template != "wecom_text" && cfg.Template != "feishu_text" && cfg.Template != "generic_json" {
+			if cfg.Template != "" && cfg.Template != "dingtalk_text" && cfg.Template != "wecom_text" && cfg.Template != "feishu_text" && cfg.Template != "feishu_report_card" && cfg.Template != "generic_json" {
 				return fmt.Errorf("deploy_stages[%d].config.template is unsupported", i)
 			}
 		default:

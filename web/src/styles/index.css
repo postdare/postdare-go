@@ -92,3 +92,42 @@ select {
     font-size: 16px;
   }
 }
+
+.report-shell { min-height: 100dvh; background: oklch(var(--background)); }
+.report-header { border-bottom: 1px solid oklch(var(--border)); background: oklch(var(--surface)); }
+.report-header-inner { width: min(1080px, calc(100% - 32px)); min-height: 80px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.report-mark { display: grid; width: 38px; height: 38px; flex: none; place-items: center; border-radius: 10px; background: oklch(var(--primary)); color: oklch(var(--primary-ink)); }
+.report-commit { display: flex; flex: none; align-items: center; gap: 8px; color: oklch(var(--muted)); font-family: theme(fontFamily.mono); font-size: 12px; }
+.report-content { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 64px; }
+.report-overview { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; padding-bottom: 28px; border-bottom: 1px solid oklch(var(--border)); }
+.risk-counts { display: flex; flex: none; gap: 18px; }
+.risk-count { display: grid; grid-template-columns: 8px auto; column-gap: 7px; align-items: center; min-width: 54px; }
+.risk-count strong { font-size: 18px; line-height: 1; }
+.risk-count span:last-child { grid-column: 2; margin-top: 3px; color: oklch(var(--muted)); font-size: 11px; }
+.risk-dot { width: 7px; height: 7px; border-radius: 999px; }
+.report-section { margin-top: 32px; }
+.report-section-title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.issue-row { display: grid; grid-template-columns: 72px 1fr; gap: 16px; padding: 18px 0; }
+.report-markdown { max-width: 76ch; color: oklch(var(--ink)); font-size: 14px; line-height: 1.75; }
+.report-markdown h1, .report-markdown h2, .report-markdown h3 { margin: 1.6em 0 .55em; font-weight: 650; line-height: 1.3; text-wrap: balance; }
+.report-markdown h1 { font-size: 22px; } .report-markdown h2 { font-size: 18px; } .report-markdown h3 { font-size: 15px; }
+.report-markdown p, .report-markdown ul, .report-markdown ol, .report-markdown blockquote { margin: .75em 0; }
+.report-markdown ul, .report-markdown ol { padding-left: 1.5em; }
+.report-markdown ul { list-style: disc; } .report-markdown ol { list-style: decimal; }
+.report-markdown a { color: oklch(var(--info)); text-decoration: underline; text-underline-offset: 3px; }
+.report-markdown blockquote { border-left: 1px solid oklch(var(--border)); padding-left: 14px; color: oklch(var(--muted)); }
+.report-markdown :not(pre) > code { border-radius: 4px; background: oklch(var(--surface-2)); padding: 2px 5px; font-family: theme(fontFamily.mono); font-size: .9em; }
+.report-markdown pre { max-width: 100%; overflow: auto; border-radius: 10px; background: oklch(var(--surface)); padding: 16px; font-family: theme(fontFamily.mono); font-size: 12px; line-height: 1.65; }
+.report-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.report-markdown th, .report-markdown td { border-bottom: 1px solid oklch(var(--border)); padding: 8px 12px; text-align: left; }
+.mermaid-diagram { overflow-x: auto; padding: 16px 0; }
+.mermaid-diagram svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+.mermaid-loading { padding: 24px; color: oklch(var(--muted)); text-align: center; }
+
+@media (max-width: 640px) {
+  .report-header-inner, .report-overview { align-items: flex-start; flex-direction: column; }
+  .report-header-inner { padding: 16px 0; gap: 12px; }
+  .report-commit { padding-left: 50px; }
+  .risk-counts { width: 100%; justify-content: space-between; }
+  .issue-row { grid-template-columns: 1fr; gap: 10px; }
+}

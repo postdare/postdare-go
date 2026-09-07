@@ -181,6 +181,7 @@ function StageEditor({ stages, onChange }: { stages: ProjectStage[]; onChange: (
                         <option value="dingtalk_text">DingTalk text</option>
                         <option value="wecom_text">WeCom text</option>
                         <option value="feishu_text">Feishu text</option>
+                        <option value="feishu_report_card">Feishu report card</option>
                         <option value="generic_json">Generic JSON</option>
                       </select>
                       <div className="relative">
@@ -210,7 +211,18 @@ function StageEditor({ stages, onChange }: { stages: ProjectStage[]; onChange: (
                       ) : null}
                     </div>
                   ) : null}
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-ink">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink">
+                    {stage.type === "command" ? (
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={stage.config.capture_as === "report"}
+                          onChange={(e) => updateConfig(index, { capture_as: e.target.checked ? "report" : "" })}
+                          className="h-4 w-4 accent-primary"
+                        />
+                        Capture stdout as AI review report
+                      </label>
+                    ) : null}
                     <label className="flex items-center gap-1.5">
                       <input
                         type="checkbox"

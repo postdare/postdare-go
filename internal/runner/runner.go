@@ -2,12 +2,15 @@ package runner
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -21,6 +24,14 @@ type CommandRunner interface {
 	Run(ctx context.Context, taskID uint64, stage string, command string) error
 }
 
+type EnvironmentCommandRunner interface {
+	RunWithEnv(ctx context.Context, taskID uint64, stage string, command string, env map[string]string) error
+}
+
+type CaptureCommandRunner interface {
+	RunCapture(ctx context.Context, taskID uint64, stage string, command string, env map[string]string, maxBytes int64) ([]byte, error)
+}
+
 type LocalCommandRunner struct {
 	LogDir  string
 	Timeout time.Duration
@@ -29,6 +40,10 @@ type LocalCommandRunner struct {
 }
 
 func (r *LocalCommandRunner) Run(parent context.Context, taskID uint64, stage string, command string) error {
+	return r.RunWithEnv(parent, taskID, stage, command, nil)
+}
+
+func (r *LocalCommandRunner) RunWithEnv(parent context.Context, taskID uint64, stage string, command string, env map[string]string) error {
 	if command == "" {
 		return nil
 	}
@@ -49,6 +64,7 @@ func (r *LocalCommandRunner) Run(parent context.Context, taskID uint64, stage st
 	defer file.Close()
 
 	cmd := exec.CommandContext(ctx, "bash", "-lc", command)
+	cmd.Env = append(os.Environ(), envPairs(env)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -104,6 +120,132 @@ func (r *LocalCommandRunner) Run(parent context.Context, taskID uint64, stage st
 	}
 	writeLine("stage command completed")
 	return nil
+}
+
+// RunCapture keeps stdout out of the deploy log and returns it to the caller.
+// stderr remains visible in the log so operators can diagnose a failed script.
+func (r *LocalCommandRunner) RunCapture(parent context.Context, taskID uint64, stage string, command string, env map[string]string, maxBytes int64) ([]byte, error) {
+	if command == "" {
+		return nil, nil
+	}
+	if r.Timeout == 0 {
+		r.Timeout = 30 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(parent, r.Timeout)
+	defer cancel()
+	if err := os.MkdirAll(r.LogDir, 0o755); err != nil {
+		return nil, err
+	}
+	logPath := filepath.Join(r.LogDir, strconv.FormatUint(taskID, 10)+".log")
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	cmd := exec.CommandContext(ctx, "bash", "-lc", command)
+	cmd.Env = append(os.Environ(), envPairs(env)...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	waitDone := make(chan struct{})
+	go terminateProcessGroupOnCancel(ctx, cmd, waitDone)
+
+	writeError := func(line string) {
+		formatted := fmt.Sprintf("[%s] %s\n", stage, line)
+		_, _ = file.WriteString(formatted)
+		if r.Hub != nil {
+			r.Hub.Publish(sse.DeployTopic(taskID), formatted)
+		}
+	}
+	var output cappedBuffer
+	output.max = maxBytes
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, _ = output.ReadFrom(stdout)
+	}()
+	go scanPipe(stderr, &wg, writeError)
+	wg.Wait()
+	err = cmd.Wait()
+	close(waitDone)
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		writeError("command timeout")
+		return nil, fmt.Errorf("command timeout after %s", r.Timeout)
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		writeError("command canceled")
+		return nil, fmt.Errorf("command canceled")
+	}
+	if output.exceeded {
+		writeError("captured stdout exceeded limit")
+		return nil, fmt.Errorf("captured stdout exceeds %d bytes", maxBytes)
+	}
+	if err != nil {
+		exitCode := -1
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		}
+		writeError(fmt.Sprintf("command exited with code %d", exitCode))
+		return nil, fmt.Errorf("command exited with code %d: %w", exitCode, err)
+	}
+	return output.Bytes(), nil
+}
+
+type cappedBuffer struct {
+	bytes.Buffer
+	max      int64
+	exceeded bool
+}
+
+func (b *cappedBuffer) ReadFrom(src interface{ Read([]byte) (int, error) }) (int64, error) {
+	buf := make([]byte, 32*1024)
+	var total int64
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			total += int64(n)
+			remaining := b.max + 1 - int64(b.Len())
+			if remaining > 0 {
+				keep := int64(n)
+				if keep > remaining {
+					keep = remaining
+				}
+				_, _ = b.Buffer.Write(buf[:keep])
+			}
+			if total > b.max {
+				b.exceeded = true
+			}
+		}
+		if err != nil {
+			if errors.Is(err, os.ErrClosed) {
+				return total, nil
+			}
+			if errors.Is(err, io.EOF) {
+				return total, nil
+			}
+			return total, err
+		}
+	}
+}
+
+func envPairs(env map[string]string) []string {
+	pairs := make([]string, 0, len(env))
+	for key, value := range env {
+		pairs = append(pairs, key+"="+value)
+	}
+	return pairs
 }
 
 func terminateProcessGroupOnCancel(ctx context.Context, cmd *exec.Cmd, waitDone <-chan struct{}) {

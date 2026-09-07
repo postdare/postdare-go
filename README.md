@@ -196,7 +196,8 @@ Git 平台：github
   4. build：cd /data/repos/my-app && mvn package -DskipTests
   5. deploy：bash /data/apps/my-app/deploy.sh
   6. health_check：http://127.0.0.1:8080/actuator/health
-  7. outbound_webhook：always，https://open.feishu.cn/open-apis/bot/v2/hook/xxx，feishu_text
+  7. ai_review：always，/opt/postdare-go/bin/ai-review-xianhu，capture_as=report
+  8. outbound_webhook：always，https://open.feishu.cn/open-apis/bot/v2/hook/xxx，feishu_report_card
 回滚命令：bash /data/apps/my-app/rollback.sh
 应用日志路径：/data/apps/my-app/logs/app.log
 自动部署：开启
@@ -283,7 +284,7 @@ GET /api/v1/projects/{project_id}/app-logs/stream
 
 ## 出站 WebHook
 
-出站 WebHook 通过 `outbound_webhook` stage 配置，URL 写在 stage 的 `config.url` 中。支持 `dingtalk_text`、`wecom_text`、`feishu_text` 和 `generic_json` 模板。
+出站 WebHook 通过 `outbound_webhook` stage 配置，URL 写在 stage 的 `config.url` 中。支持 `dingtalk_text`、`wecom_text`、`feishu_text`、`feishu_report_card` 和 `generic_json` 模板。
 
 出站 WebHook 失败会记录到部署日志和后端日志；用于告警时建议设置 `continue_on_error=true`。
 

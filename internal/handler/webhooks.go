@@ -78,6 +78,7 @@ func (h *Handler) handleWebhook(c *gin.Context, provider string, parser webhook.
 		EventType:      ev.EventType,
 		Branch:         ev.Branch,
 		CommitID:       ev.CommitID,
+		BeforeCommitID: ev.BeforeCommitID,
 		CommitMessage:  ev.CommitMessage,
 		CommitAuthor:   ev.CommitAuthor,
 		DeliveryID:     ev.DeliveryID,

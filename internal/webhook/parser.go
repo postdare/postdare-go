@@ -13,14 +13,15 @@ const (
 )
 
 type Event struct {
-	Provider      GitProvider `json:"provider"`
-	EventType     string      `json:"event_type"`
-	Branch        string      `json:"branch"`
-	CommitID      string      `json:"commit_id"`
-	CommitMessage string      `json:"commit_message"`
-	CommitAuthor  string      `json:"commit_author"`
-	DeliveryID    string      `json:"delivery_id"`
-	RawPayload    []byte      `json:"-"`
+	Provider       GitProvider `json:"provider"`
+	EventType      string      `json:"event_type"`
+	Branch         string      `json:"branch"`
+	CommitID       string      `json:"commit_id"`
+	BeforeCommitID string      `json:"before_commit_id"`
+	CommitMessage  string      `json:"commit_message"`
+	CommitAuthor   string      `json:"commit_author"`
+	DeliveryID     string      `json:"delivery_id"`
+	RawPayload     []byte      `json:"-"`
 }
 
 type WebhookParser interface {

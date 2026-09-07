@@ -49,6 +49,7 @@ func (s *Service) CreateDeployTask(ctx context.Context, project model.Project, t
 			task.GitProvider = string(ev.Provider)
 			task.Branch = ev.Branch
 			task.CommitID = ev.CommitID
+			task.BeforeCommitID = ev.BeforeCommitID
 			task.CommitMessage = ev.CommitMessage
 			task.CommitAuthor = ev.CommitAuthor
 		}
@@ -131,7 +132,7 @@ func (s *Service) executeDeploy(ctx context.Context, project model.Project, task
 }
 
 func (s *Service) executeRollback(ctx context.Context, project model.Project, task *model.DeployTask) {
-	if !s.executeCommandStage(ctx, task, "rollback", project.RollbackCmd) {
+	if !s.executeCommandStage(ctx, project, task, "rollback", project.RollbackCmd) {
 		if task.Status != model.TaskCanceled {
 			s.executeDeferredStages(context.Background(), project, task)
 		}

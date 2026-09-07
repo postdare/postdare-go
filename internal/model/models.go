@@ -27,6 +27,11 @@ const (
 	StageFailed  = "failed"
 	StageSkipped = "skipped"
 
+	ReportTypeAIReview = "ai_review"
+	ReportSuccess      = "success"
+	ReportFailed       = "failed"
+	ReportSkipped      = "skipped"
+
 	ProjectStageTypeCommand         = "command"
 	ProjectStageTypeHealthCheck     = "health_check"
 	ProjectStageTypeOutboundWebhook = "outbound_webhook"
@@ -75,7 +80,8 @@ type ProjectStage struct {
 }
 
 type CommandStageConfig struct {
-	Command string `json:"command"`
+	Command   string `json:"command"`
+	CaptureAs string `json:"capture_as,omitempty"`
 }
 
 type HealthCheckStageConfig struct {
@@ -89,24 +95,25 @@ type OutboundWebhookStageConfig struct {
 }
 
 type DeployTask struct {
-	ID            uint64            `gorm:"primaryKey" json:"id"`
-	ProjectID     uint64            `gorm:"not null;index:idx_deploy_tasks_project_id" json:"project_id"`
-	Project       *Project          `json:"project,omitempty"`
-	Stages        []DeployTaskStage `gorm:"foreignKey:TaskID" json:"stages,omitempty"`
-	TriggerType   string            `gorm:"size:50;not null" json:"trigger_type"`
-	GitProvider   string            `gorm:"size:50" json:"git_provider"`
-	Branch        string            `gorm:"size:100" json:"branch"`
-	CommitID      string            `gorm:"size:100" json:"commit_id"`
-	CommitMessage string            `gorm:"type:text" json:"commit_message"`
-	CommitAuthor  string            `gorm:"size:100" json:"commit_author"`
-	Status        string            `gorm:"size:50;not null;index:idx_deploy_tasks_status" json:"status"`
-	CurrentStage  string            `gorm:"size:100" json:"current_stage"`
-	FailReason    string            `gorm:"type:text" json:"fail_reason"`
-	LogFile       string            `gorm:"size:500" json:"log_file"`
-	StartedAt     *time.Time        `json:"started_at"`
-	FinishedAt    *time.Time        `json:"finished_at"`
-	CreatedAt     time.Time         `gorm:"index:idx_deploy_tasks_created_at" json:"created_at"`
-	UpdatedAt     time.Time         `json:"updated_at"`
+	ID             uint64            `gorm:"primaryKey" json:"id"`
+	ProjectID      uint64            `gorm:"not null;index:idx_deploy_tasks_project_id" json:"project_id"`
+	Project        *Project          `json:"project,omitempty"`
+	Stages         []DeployTaskStage `gorm:"foreignKey:TaskID" json:"stages,omitempty"`
+	TriggerType    string            `gorm:"size:50;not null" json:"trigger_type"`
+	GitProvider    string            `gorm:"size:50" json:"git_provider"`
+	Branch         string            `gorm:"size:100" json:"branch"`
+	CommitID       string            `gorm:"size:100" json:"commit_id"`
+	BeforeCommitID string            `gorm:"size:100" json:"before_commit_id"`
+	CommitMessage  string            `gorm:"type:text" json:"commit_message"`
+	CommitAuthor   string            `gorm:"size:100" json:"commit_author"`
+	Status         string            `gorm:"size:50;not null;index:idx_deploy_tasks_status" json:"status"`
+	CurrentStage   string            `gorm:"size:100" json:"current_stage"`
+	FailReason     string            `gorm:"type:text" json:"fail_reason"`
+	LogFile        string            `gorm:"size:500" json:"log_file"`
+	StartedAt      *time.Time        `json:"started_at"`
+	FinishedAt     *time.Time        `json:"finished_at"`
+	CreatedAt      time.Time         `gorm:"index:idx_deploy_tasks_created_at" json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
 }
 
 type DeployTaskStage struct {
@@ -130,6 +137,7 @@ type WebhookEvent struct {
 	EventType      string          `gorm:"size:100" json:"event_type"`
 	Branch         string          `gorm:"size:100" json:"branch"`
 	CommitID       string          `gorm:"size:100" json:"commit_id"`
+	BeforeCommitID string          `gorm:"size:100" json:"before_commit_id"`
 	CommitMessage  string          `gorm:"type:text" json:"commit_message"`
 	CommitAuthor   string          `gorm:"size:100" json:"commit_author"`
 	DeliveryID     string          `gorm:"size:255" json:"delivery_id"`
@@ -138,6 +146,36 @@ type WebhookEvent struct {
 	IgnoredReason  string          `gorm:"type:text" json:"ignored_reason"`
 	RawPayload     json.RawMessage `gorm:"type:json" json:"raw_payload,omitempty"`
 	CreatedAt      time.Time       `gorm:"index:idx_webhook_events_created_at" json:"created_at"`
+}
+
+type ReportIssue struct {
+	Severity   string `json:"severity"`
+	Title      string `json:"title"`
+	Location   string `json:"location,omitempty"`
+	Trigger    string `json:"trigger,omitempty"`
+	Impact     string `json:"impact,omitempty"`
+	Suggestion string `json:"suggestion,omitempty"`
+}
+
+// Report stores a structured artifact produced by a deploy stage. ShareTokenHash
+// is intentionally never serialized; the raw token is only returned when rotated.
+type Report struct {
+	ID             uint64        `gorm:"primaryKey" json:"id"`
+	Type           string        `gorm:"size:50;not null;uniqueIndex:idx_reports_task_type" json:"type"`
+	ProjectID      uint64        `gorm:"not null;index:idx_reports_project_id" json:"project_id"`
+	TaskID         uint64        `gorm:"not null;uniqueIndex:idx_reports_task_type;index:idx_reports_task_id" json:"task_id"`
+	CommitID       string        `gorm:"size:100" json:"commit_id"`
+	BeforeCommitID string        `gorm:"size:100" json:"before_commit_id"`
+	Status         string        `gorm:"size:50;not null" json:"status"`
+	Conclusion     string        `gorm:"size:100" json:"conclusion"`
+	Summary        string        `gorm:"type:text" json:"summary"`
+	Issues         []ReportIssue `gorm:"serializer:json;type:json" json:"issues"`
+	Markdown       string        `gorm:"type:longtext" json:"markdown"`
+	ErrorMessage   string        `gorm:"type:text" json:"error_message,omitempty"`
+	ShareTokenHash string        `gorm:"size:64" json:"-"`
+	ShareEnabled   bool          `gorm:"not null;default:false" json:"share_enabled"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
 }
 
 type Setting struct {

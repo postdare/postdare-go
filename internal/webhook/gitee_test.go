@@ -23,7 +23,7 @@ func TestGiteeParserNormalizesPushEvents(t *testing.T) {
 			if tt.header != "" {
 				headers.Set("X-Gitee-Event", tt.header)
 			}
-			body := []byte(`{"hook_name":"` + tt.hookName + `","ref":"refs/heads/main","after":"abc123","head_commit":{"message":"test","author":{"name":"kim"}}}`)
+			body := []byte(`{"hook_name":"` + tt.hookName + `","ref":"refs/heads/main","before":"base123","after":"abc123","head_commit":{"message":"test","author":{"name":"kim"}}}`)
 
 			event, err := GiteeWebhookParser{}.Parse(headers, body)
 			if err != nil {
@@ -31,6 +31,9 @@ func TestGiteeParserNormalizesPushEvents(t *testing.T) {
 			}
 			if event.EventType != tt.wantEvent {
 				t.Fatalf("EventType = %q, want %q", event.EventType, tt.wantEvent)
+			}
+			if event.BeforeCommitID != "base123" {
+				t.Fatalf("BeforeCommitID = %q, want base123", event.BeforeCommitID)
 			}
 		})
 	}

@@ -76,6 +76,13 @@ func TestDeleteProjectCascadesRelatedRecordsAndKeepsLogFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	taskA, taskB, otherTask := tasks[0], tasks[1], tasks[2]
+	reports := []model.Report{
+		{Type: model.ReportTypeAIReview, ProjectID: project.ID, TaskID: taskA.ID, Status: model.ReportSuccess},
+		{Type: model.ReportTypeAIReview, ProjectID: otherProject.ID, TaskID: otherTask.ID, Status: model.ReportSuccess},
+	}
+	if err := database.Create(&reports).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	stages := []model.DeployTaskStage{
 		{TaskID: taskA.ID, Name: "build", Status: model.StageSuccess},
@@ -109,6 +116,8 @@ func TestDeleteProjectCascadesRelatedRecordsAndKeepsLogFile(t *testing.T) {
 	assertRowCount(t, database, &model.DeployTask{}, "project_id = ?", 1, otherProject.ID)
 	assertRowCount(t, database, &model.DeployTaskStage{}, "task_id IN ?", 0, []uint64{taskA.ID, taskB.ID})
 	assertRowCount(t, database, &model.DeployTaskStage{}, "task_id = ?", 1, otherTask.ID)
+	assertRowCount(t, database, &model.Report{}, "project_id = ?", 0, project.ID)
+	assertRowCount(t, database, &model.Report{}, "project_id = ?", 1, otherProject.ID)
 	assertRowCount(t, database, &model.WebhookEvent{}, "project_id = ? OR project_key = ?", 0, project.ID, project.ProjectKey)
 	assertRowCount(t, database, &model.WebhookEvent{}, "project_id = ? OR project_key = ?", 1, otherProject.ID, otherProject.ProjectKey)
 	if _, err := os.Stat(logFile); err != nil {
@@ -123,7 +132,7 @@ func setupDeleteProjectTest(t *testing.T) (*gorm.DB, *gin.Engine) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.Project{}, &model.DeployTask{}, &model.DeployTaskStage{}); err != nil {
+	if err := database.AutoMigrate(&model.Project{}, &model.DeployTask{}, &model.DeployTaskStage{}, &model.Report{}); err != nil {
 		t.Fatal(err)
 	}
 	// SQLite requires globally unique index names, so this test creates the
@@ -136,6 +145,7 @@ func setupDeleteProjectTest(t *testing.T) (*gorm.DB, *gin.Engine) {
 		event_type text,
 		branch text,
 		commit_id text,
+		before_commit_id text,
 		commit_message text,
 		commit_author text,
 		delivery_id text,

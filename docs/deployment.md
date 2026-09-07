@@ -81,6 +81,37 @@ bash /data/apps/my-app/rollback.sh
 Do not pass command strings from the web UI at deploy time. Store stages in the project
 configuration.
 
+### AI review report
+
+Command stages may set `config.capture_as: report`. Postdare captures at most 2 MiB of
+stdout as structured JSON and keeps it out of the deploy log; stderr remains in the log.
+The runner injects `POSTDARE_TASK_ID`, `POSTDARE_TRIGGER_TYPE`,
+`POSTDARE_PROJECT_DIR`, `POSTDARE_COMMIT_ID`, and
+`POSTDARE_BEFORE_COMMIT_ID`. Webhook deploys use the full `before..after` range;
+manual and MCP deploys use `HEAD^..HEAD`. Report-stage failures never change the
+deployment result.
+
+Install the Xianhu example script at the stable server path:
+
+```bash
+sudo install -m 0755 examples/ai-review-xianhu /opt/postdare-go/bin/ai-review-xianhu
+```
+
+Configure the command as `/opt/postdare-go/bin/ai-review-xianhu`, set
+`capture_as: report`, `run_when: always`, and keep the Feishu outbound stage after it
+with template `feishu_report_card`. Set `server.public_url` to the externally reachable
+HTTPS origin so the card can link to `/reports/{report_id}`.
+
+Authenticated report endpoints are:
+
+- `GET /api/v1/deploy-tasks/{task_id}/reports`
+- `GET /api/v1/reports/{report_id}`
+- `POST /api/v1/reports/{report_id}/share` (creates or rotates the token)
+- `DELETE /api/v1/reports/{report_id}/share`
+
+The public page calls `GET /api/v1/public/reports/{report_id}` with the token in the
+`X-Report-Token` header. Only the SHA-256 token digest is stored in the database.
+
 ## Logs
 
 Deploy logs are written to:

@@ -2,7 +2,7 @@ export type GitProvider = "gitee" | "github";
 export type DeployStatus = "pending" | "running" | "success" | "failed" | "canceled" | "rollbacked";
 export type ProjectStageType = "command" | "health_check" | "outbound_webhook";
 export type ProjectStageRunWhen = "success" | "failed" | "always";
-export type OutboundWebhookTemplate = "dingtalk_text" | "wecom_text" | "feishu_text" | "generic_json";
+export type OutboundWebhookTemplate = "dingtalk_text" | "wecom_text" | "feishu_text" | "feishu_report_card" | "generic_json";
 
 export interface User {
   id: number;
@@ -23,6 +23,7 @@ export interface CommandProjectStage extends ProjectStageBase {
   type: "command";
   config: {
     command: string;
+    capture_as?: "report";
   };
 }
 
@@ -100,6 +101,7 @@ export interface WebhookEvent {
   event_type?: string;
   branch?: string;
   commit_id?: string;
+  before_commit_id?: string;
   commit_message?: string;
   commit_author?: string;
   delivery_id?: string;
@@ -107,6 +109,37 @@ export interface WebhookEvent {
   handled: boolean;
   ignored_reason?: string;
   created_at?: string;
+}
+
+export interface ReportIssue {
+  severity: "high" | "medium" | "low";
+  title: string;
+  location?: string;
+  trigger?: string;
+  impact?: string;
+  suggestion?: string;
+}
+
+export interface Report {
+  id: number;
+  type: string;
+  project_id: number;
+  project_name: string;
+  task_id: number;
+  trigger_type: string;
+  branch: string;
+  commit_id: string;
+  before_commit_id: string;
+  deploy_status: string;
+  status: "success" | "failed" | "skipped";
+  conclusion: string;
+  summary: string;
+  issues: ReportIssue[];
+  markdown: string;
+  error_message?: string;
+  share_enabled: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DashboardSummary {

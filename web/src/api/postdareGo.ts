@@ -1,5 +1,5 @@
 import { apiRequest, withQuery } from "./client";
-import type { DashboardSummary, DataResponse, DeployTask, ListResponse, Project, User, WebhookEvent } from "./types";
+import type { DashboardSummary, DataResponse, DeployTask, ListResponse, Project, Report, User, WebhookEvent } from "./types";
 
 export function login(username: string, password: string) {
   return apiRequest<DataResponse<{ token: string; user: User }>>("/api/v1/auth/login", {
@@ -61,6 +61,14 @@ export function listDeployTasks(token?: string | null, params: Record<string, st
 
 export function getDeployTask(id: string | number, token?: string | null) {
   return apiRequest<DataResponse<DeployTask>>(`/api/v1/deploy-tasks/${id}`, {}, token);
+}
+
+export function listDeployTaskReports(id: string | number, token?: string | null) {
+  return apiRequest<DataResponse<Report[]>>(`/api/v1/deploy-tasks/${id}/reports`, {}, token);
+}
+
+export function getPublicReport(id: string | number, reportToken: string) {
+  return apiRequest<DataResponse<Report>>(`/api/v1/public/reports/${id}`, { headers: { "X-Report-Token": reportToken } });
 }
 
 export function getDeployLog(id: string | number, token?: string | null, lines = 500) {

@@ -24,7 +24,21 @@ func (s *Service) runOutboundWebhookStage(ctx context.Context, project model.Pro
 		return stageOK, nil
 	}
 	cfg.URL = webhookURL
-	err := s.Notifier.SendOutboundWebhook(project, *task, cfg)
+	var report *model.Report
+	reportURL := ""
+	if cfg.Template == "feishu_report_card" {
+		var found model.Report
+		if queryErr := s.DB.WithContext(ctx).Where("task_id = ? AND type = ?", task.ID, model.ReportTypeAIReview).First(&found).Error; queryErr == nil {
+			shared, _, url, shareErr := s.RotateReportShare(ctx, found.ID)
+			if shareErr == nil {
+				report = &shared
+				reportURL = url
+			} else {
+				report = &found
+			}
+		}
+	}
+	err := s.Notifier.SendOutboundWebhookWithReport(project, *task, cfg, report, reportURL)
 	now := time.Now()
 	stage.FinishedAt = &now
 	if err != nil {

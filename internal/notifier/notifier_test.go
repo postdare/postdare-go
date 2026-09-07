@@ -45,6 +45,36 @@ func TestSendOutboundWebhookRendersFeishuTextTemplate(t *testing.T) {
 	}
 }
 
+func TestFeishuReportCardUsesRiskColorSummaryAndLink(t *testing.T) {
+	project := model.Project{Name: "xianhu"}
+	task := model.DeployTask{ID: 9, Status: model.TaskSuccess, Branch: "release", CommitID: "1234567890abcdef"}
+	report := &model.Report{Status: model.ReportSuccess, Conclusion: "issues_found", Summary: strings.Repeat("审", 260), Issues: []model.ReportIssue{
+		{Severity: "high", Title: "SQL injection"}, {Severity: "medium", Title: "Missing timeout"}, {Severity: "low", Title: "Weak message"}, {Severity: "low", Title: "Fourth"},
+	}}
+	raw, err := renderPayloadWithReport(model.OutboundWebhookStageConfig{Template: TemplateFeishuReportCard}, "", project, task, report, "https://go.postdare.com/reports/1#token=secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["msg_type"] != "interactive" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+	card := payload["card"].(map[string]interface{})
+	header := card["header"].(map[string]interface{})
+	if header["template"] != "red" {
+		t.Fatalf("expected red header, got %+v", header)
+	}
+	if !strings.Contains(string(raw), "查看完整报告") || !strings.Contains(string(raw), "reports/1#token=secret") {
+		t.Fatalf("missing report action: %s", raw)
+	}
+	if strings.Contains(string(raw), "Fourth") {
+		t.Fatal("card includes more than three highlighted issues")
+	}
+}
+
 func TestSendOutboundWebhookDetectsFeishuBusinessError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

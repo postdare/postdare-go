@@ -27,6 +27,7 @@ func RegisterRoutes(r *gin.Engine, h *Handler) {
 	api.POST("/auth/login", h.Login)
 	api.POST("/webhooks/gitee/:project_key", h.HandleGiteeWebhook)
 	api.POST("/webhooks/github/:project_key", h.HandleGitHubWebhook)
+	api.GET("/public/reports/:report_id", h.GetPublicReport)
 
 	secured := api.Group("")
 	secured.Use(middleware.Auth(h.Config))
@@ -53,6 +54,10 @@ func RegisterRoutes(r *gin.Engine, h *Handler) {
 	secured.GET("/deploy-tasks/:task_id/logs/stream", h.StreamDeployTaskLogs)
 	secured.POST("/deploy-tasks/:task_id/cancel", h.CancelDeployTask)
 	secured.GET("/deploy-tasks/:task_id/analysis", h.AnalyzeDeployTask)
+	secured.GET("/deploy-tasks/:task_id/reports", h.ListDeployTaskReports)
+	secured.GET("/reports/:report_id", h.GetReport)
+	secured.POST("/reports/:report_id/share", h.ShareReport)
+	secured.DELETE("/reports/:report_id/share", h.RevokeReportShare)
 
 	secured.GET("/webhook-events", h.ListWebhookEvents)
 	secured.GET("/webhook-events/:event_id", h.GetWebhookEvent)

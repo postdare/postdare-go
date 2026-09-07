@@ -62,6 +62,28 @@ func TestLocalCommandRunnerCancelsProcessGroup(t *testing.T) {
 	t.Fatalf("child process %d still exists after cancel", childPID)
 }
 
+func TestLocalCommandRunnerCaptureEnforcesLimitAndKeepsStdoutOutOfLog(t *testing.T) {
+	tmp := t.TempDir()
+	r := &LocalCommandRunner{LogDir: tmp, Timeout: time.Minute}
+	output, err := r.RunCapture(context.Background(), 7, "review", "printf '{\"ok\":true}'; printf 'diagnostic' >&2", nil, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(output) != `{"ok":true}` {
+		t.Fatalf("unexpected output %q", output)
+	}
+	logBytes, err := os.ReadFile(filepath.Join(tmp, "7.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(logBytes), `{"ok":true}`) || !strings.Contains(string(logBytes), "diagnostic") {
+		t.Fatalf("unexpected capture log %q", logBytes)
+	}
+	if _, err := r.RunCapture(context.Background(), 8, "review", "yes x | head -c 2049", nil, 2048); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected output limit error, got %v", err)
+	}
+}
+
 func processExists(pid int) bool {
 	if pid <= 0 {
 		return false

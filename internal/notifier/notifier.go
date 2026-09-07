@@ -17,10 +17,11 @@ import (
 )
 
 const (
-	TemplateDingTalkText = "dingtalk_text"
-	TemplateWeComText    = "wecom_text"
-	TemplateFeishuText   = "feishu_text"
-	TemplateGenericJSON  = "generic_json"
+	TemplateDingTalkText     = "dingtalk_text"
+	TemplateWeComText        = "wecom_text"
+	TemplateFeishuText       = "feishu_text"
+	TemplateFeishuReportCard = "feishu_report_card"
+	TemplateGenericJSON      = "generic_json"
 )
 
 const defaultMessageTemplate = `Postdare Go {{ .Scene }}
@@ -56,6 +57,10 @@ type MessageContext struct {
 }
 
 func (n *Notifier) SendOutboundWebhook(project model.Project, task model.DeployTask, cfg model.OutboundWebhookStageConfig) error {
+	return n.SendOutboundWebhookWithReport(project, task, cfg, nil, "")
+}
+
+func (n *Notifier) SendOutboundWebhookWithReport(project model.Project, task model.DeployTask, cfg model.OutboundWebhookStageConfig, report *model.Report, reportURL string) error {
 	if strings.TrimSpace(cfg.URL) == "" {
 		return nil
 	}
@@ -63,7 +68,7 @@ func (n *Notifier) SendOutboundWebhook(project model.Project, task model.DeployT
 	if err != nil {
 		return err
 	}
-	raw, err := renderPayload(cfg, content)
+	raw, err := renderPayloadWithReport(cfg, content, project, task, report, reportURL)
 	if err != nil {
 		return err
 	}
@@ -117,7 +122,14 @@ func renderMessage(project model.Project, task model.DeployTask, messageTemplate
 }
 
 func renderPayload(cfg model.OutboundWebhookStageConfig, content string) ([]byte, error) {
+	return renderPayloadWithReport(cfg, content, model.Project{}, model.DeployTask{}, nil, "")
+}
+
+func renderPayloadWithReport(cfg model.OutboundWebhookStageConfig, content string, project model.Project, task model.DeployTask, report *model.Report, reportURL string) ([]byte, error) {
 	templateName := outboundTemplateName(cfg.Template)
+	if templateName == TemplateFeishuReportCard {
+		return json.Marshal(feishuReportCard(project, task, report, reportURL))
+	}
 	if templateName == TemplateGenericJSON {
 		var raw json.RawMessage
 		if err := json.Unmarshal([]byte(content), &raw); err != nil {
@@ -157,7 +169,7 @@ func validateWebhookResponse(templateName string, body []byte) error {
 		return nil
 	}
 	switch outboundTemplateName(templateName) {
-	case TemplateFeishuText:
+	case TemplateFeishuText, TemplateFeishuReportCard:
 		if code, ok := responseCode(decoded, "code", "StatusCode"); ok && code != 0 {
 			return fmt.Errorf("outbound webhook business error %s: %s", formatResponseCode(code), responseMessage(decoded))
 		}
@@ -167,6 +179,83 @@ func validateWebhookResponse(templateName string, body []byte) error {
 		}
 	}
 	return nil
+}
+
+func feishuReportCard(project model.Project, task model.DeployTask, report *model.Report, reportURL string) map[string]interface{} {
+	status := "报告失败"
+	conclusion := "failed"
+	summary := "AI 审查报告未生成，请查看部署阶段日志。"
+	counts := map[string]int{"high": 0, "medium": 0, "low": 0}
+	issues := []model.ReportIssue{}
+	if report != nil {
+		status = report.Status
+		conclusion = report.Conclusion
+		summary = truncateRunes(report.Summary, 240)
+		if summary == "" && report.ErrorMessage != "" {
+			summary = truncateRunes(report.ErrorMessage, 240)
+		}
+		issues = report.Issues
+		for _, issue := range issues {
+			counts[issue.Severity]++
+		}
+	}
+	headerColor := "grey"
+	if report != nil && report.Status == model.ReportSuccess {
+		switch {
+		case counts["high"] > 0:
+			headerColor = "red"
+		case len(issues) > 0:
+			headerColor = "orange"
+		default:
+			headerColor = "green"
+		}
+	}
+	elements := []interface{}{
+		map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": fmt.Sprintf("**部署状态** %s\n**项目** %s\n**分支** %s\n**Commit** `%s`", task.Status, project.Name, task.Branch, shortCommit(task.CommitID))}},
+		map[string]interface{}{"tag": "hr"},
+		map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": fmt.Sprintf("**报告类型** AI Review\n**审查结论** %s\n**风险** 高 %d · 中 %d · 低 %d", conclusion, counts["high"], counts["medium"], counts["low"])}},
+		map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": summary}},
+	}
+	highlights := make([]string, 0, 3)
+	for _, severity := range []string{"high", "medium", "low"} {
+		for _, issue := range issues {
+			if issue.Severity == severity && len(highlights) < 3 {
+				highlights = append(highlights, fmt.Sprintf("• **%s** %s", strings.ToUpper(issue.Severity), issue.Title))
+			}
+		}
+	}
+	if len(highlights) > 0 {
+		elements = append(elements, map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": strings.Join(highlights, "\n")}})
+	}
+	if reportURL != "" {
+		elements = append(elements, map[string]interface{}{"tag": "action", "actions": []interface{}{map[string]interface{}{"tag": "button", "type": "primary", "text": map[string]string{"tag": "plain_text", "content": "查看完整报告"}, "url": reportURL}}})
+	}
+	return map[string]interface{}{
+		"msg_type": "interactive",
+		"card": map[string]interface{}{
+			"header":   map[string]interface{}{"template": headerColor, "title": map[string]string{"tag": "plain_text", "content": fmt.Sprintf("%s · AI 审查 %s", project.Name, status)}},
+			"elements": elements,
+		},
+	}
+}
+
+func truncateRunes(value string, max int) string {
+	runes := []rune(strings.TrimSpace(value))
+	if len(runes) <= max {
+		return string(runes)
+	}
+	return string(runes[:max-1]) + "…"
+}
+
+func shortCommit(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 8 {
+		return value[:8]
+	}
+	if value == "" {
+		return "unknown"
+	}
+	return value
 }
 
 func responseCode(decoded map[string]interface{}, keys ...string) (float64, bool) {

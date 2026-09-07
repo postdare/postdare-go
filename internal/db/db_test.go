@@ -55,6 +55,9 @@ func TestOpenSQLiteCreatesFileSeedsAdminAndIsIdempotent(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("expected one admin user, got %d", count)
 	}
+	if !second.Migrator().HasTable(&model.Report{}) {
+		t.Fatal("expected reports table to be auto-migrated")
+	}
 }
 
 func TestOpenSQLiteUsesProvidedAdminPasswordWithoutForcedChange(t *testing.T) {

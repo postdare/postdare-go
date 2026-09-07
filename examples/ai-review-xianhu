@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PI_BIN="/root/.nvm/versions/node/v25.5.0/bin/pi"
+MODEL="litellm/glm-5.3-flash"
+SKILL_DIR="/root/xianhu/xianhu-server/.agents/skills/show-me"
+PROJECT_DIR="${POSTDARE_PROJECT_DIR:?POSTDARE_PROJECT_DIR is required}"
+BASE_COMMIT="${POSTDARE_BEFORE_COMMIT_ID:-HEAD^}"
+TARGET_COMMIT="${POSTDARE_COMMIT_ID:-HEAD}"
+
+cd "$PROJECT_DIR"
+if ! git rev-parse --verify "${BASE_COMMIT}^{commit}" >/dev/null 2>&1 || ! git rev-parse --verify "${TARGET_COMMIT}^{commit}" >/dev/null 2>&1; then
+  printf '%s\n' '{"report_type":"ai_review","status":"failed","conclusion":"commit_missing","summary":"无法解析审查所需的基线或目标 commit。","issues":[],"markdown":"","error_message":"baseline or target commit is missing"}'
+  exit 0
+fi
+
+DIFF_FILE="$(mktemp /tmp/postdare-ai-review.XXXXXX.diff)"
+trap 'rm -f "$DIFF_FILE"' EXIT
+git diff --no-ext-diff --unified=80 "${BASE_COMMIT}..${TARGET_COMMIT}" >"$DIFF_FILE"
+if [[ ! -s "$DIFF_FILE" ]]; then
+  printf '%s\n' '{"report_type":"ai_review","status":"skipped","conclusion":"no_changes","summary":"提交范围内没有可审查的代码变更。","issues":[],"markdown":"## 审查结果\n\n提交范围内没有代码差异。","error_message":""}'
+  exit 0
+fi
+
+PROMPT='审查附带的 git diff。只输出一个 JSON 对象，不要 Markdown 围栏或额外文字。结构必须是：{"report_type":"ai_review","status":"success","conclusion":"passed|issues_found","summary":"不超过240个中文字符","issues":[{"severity":"high|medium|low","title":"标题","location":"文件:行号","trigger":"触发条件","impact":"影响","suggestion":"建议"}],"markdown":"完整 Markdown 报告","error_message":""}。只报告由本次 diff 引入且可验证的问题；没有问题时 issues 为空、conclusion 为 passed。Markdown 中可使用 GFM 和 Mermaid，但不要使用原始 HTML。'
+
+exec "$PI_BIN" \
+  --model "$MODEL" \
+  --skill "$SKILL_DIR" \
+  --no-tools \
+  --no-context-files \
+  --no-extensions \
+  --no-session \
+  --print \
+  "@$DIFF_FILE" \
+  "$PROMPT"

@@ -34,6 +34,7 @@ type Config struct {
 type ServerConfig struct {
 	Port        int      `yaml:"port"`
 	CORSOrigins []string `yaml:"cors_origins"`
+	PublicURL   string   `yaml:"public_url"`
 }
 
 type DatabaseConfig struct {
@@ -238,6 +239,7 @@ func (c *Config) resolveSecrets() error {
 }
 
 func (c *Config) validate() error {
+	c.Server.PublicURL = strings.TrimRight(strings.TrimSpace(c.Server.PublicURL), "/")
 	c.Database.Driver = strings.ToLower(strings.TrimSpace(c.Database.Driver))
 	switch c.Database.Driver {
 	case "sqlite":

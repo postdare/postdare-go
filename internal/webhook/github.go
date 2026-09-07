@@ -33,13 +33,14 @@ func (GitHubWebhookParser) Parse(headers http.Header, body []byte) (*Event, erro
 	commit := mapFromMap(payload, "head_commit")
 	author := mapFromMap(commit, "author")
 	return &Event{
-		Provider:      GitProviderGitHub,
-		EventType:     headers.Get("X-GitHub-Event"),
-		Branch:        BranchFromRef(stringFromMap(payload, "ref")),
-		CommitID:      firstNonEmpty(stringFromMap(payload, "after"), stringFromMap(commit, "id")),
-		CommitMessage: stringFromMap(commit, "message"),
-		CommitAuthor:  firstNonEmpty(stringFromMap(author, "name"), stringFromMap(author, "username"), stringFromMap(author, "email")),
-		DeliveryID:    headers.Get("X-GitHub-Delivery"),
-		RawPayload:    body,
+		Provider:       GitProviderGitHub,
+		EventType:      headers.Get("X-GitHub-Event"),
+		Branch:         BranchFromRef(stringFromMap(payload, "ref")),
+		CommitID:       firstNonEmpty(stringFromMap(payload, "after"), stringFromMap(commit, "id")),
+		BeforeCommitID: stringFromMap(payload, "before"),
+		CommitMessage:  stringFromMap(commit, "message"),
+		CommitAuthor:   firstNonEmpty(stringFromMap(author, "name"), stringFromMap(author, "username"), stringFromMap(author, "email")),
+		DeliveryID:     headers.Get("X-GitHub-Delivery"),
+		RawPayload:     body,
 	}, nil
 }

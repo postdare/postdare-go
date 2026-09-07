@@ -25,7 +25,7 @@ const (
 // runCommandStage executes one shell-command stage and records its DeployTaskStage row.
 // It never mutates task-level status; on failure it returns the underlying error
 // so the caller can surface it via failTask when appropriate.
-func (s *Service) runCommandStage(ctx context.Context, task *model.DeployTask, name string, command string) (stageOutcome, error) {
+func (s *Service) runCommandStage(ctx context.Context, project model.Project, task *model.DeployTask, name string, command string) (stageOutcome, error) {
 	if s.isCanceled(ctx, task.ID) {
 		return stageCanceled, nil
 	}
@@ -39,7 +39,12 @@ func (s *Service) runCommandStage(ctx context.Context, task *model.DeployTask, n
 		return stageOK, nil
 	}
 	runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "stage started")
-	err := s.Runner.Run(ctx, task.ID, name, command)
+	var err error
+	if environmentRunner, ok := s.Runner.(runner.EnvironmentCommandRunner); ok {
+		err = environmentRunner.RunWithEnv(ctx, task.ID, name, command, reportCommandEnv(project, *task))
+	} else {
+		err = s.Runner.Run(ctx, task.ID, name, command)
+	}
 	now := time.Now()
 	stage.FinishedAt = &now
 	if err != nil {
@@ -62,8 +67,8 @@ func (s *Service) runCommandStage(ctx context.Context, task *model.DeployTask, n
 
 // executeCommandStage runs a stage and applies the default "fail the whole task on
 // error" behavior. Used by the rollback path, which has no per-stage error policy.
-func (s *Service) executeCommandStage(ctx context.Context, task *model.DeployTask, name string, command string) bool {
-	switch outcome, err := s.runCommandStage(ctx, task, name, command); outcome {
+func (s *Service) executeCommandStage(ctx context.Context, project model.Project, task *model.DeployTask, name string, command string) bool {
+	switch outcome, err := s.runCommandStage(ctx, project, task, name, command); outcome {
 	case stageOK:
 		return true
 	case stageCanceled:
@@ -122,7 +127,10 @@ func (s *Service) runProjectStage(ctx context.Context, project model.Project, ta
 		if err != nil {
 			return stageFailed, err
 		}
-		return s.runCommandStage(ctx, task, stage.Name, cfg.Command)
+		if cfg.CaptureAs == "report" {
+			return s.runReportCommandStage(ctx, project, task, stage.Name, cfg.Command)
+		}
+		return s.runCommandStage(ctx, project, task, stage.Name, cfg.Command)
 	case model.ProjectStageTypeHealthCheck:
 		cfg, err := healthCheckStageConfig(stage)
 		if err != nil {

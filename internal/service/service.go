@@ -78,6 +78,9 @@ func (s *Service) DeleteProject(ctx context.Context, projectID uint64) error {
 			return err
 		}
 		if len(taskIDs) > 0 {
+			if err := tx.Where("task_id IN ?", taskIDs).Delete(&model.Report{}).Error; err != nil {
+				return err
+			}
 			if err := tx.Where("task_id IN ?", taskIDs).Delete(&model.DeployTaskStage{}).Error; err != nil {
 				return err
 			}
