@@ -149,7 +149,17 @@ Point it at the reviewer through `/etc/postdare-go/ai-review.env` (see
 POSTDARE_REVIEW_PI_BIN=/path/to/pi      # defaults to "pi" on PATH
 POSTDARE_REVIEW_MODEL=litellm/glm-5.3-flash
 POSTDARE_REVIEW_SKILL_DIR=/path/to/skill   # optional; omitted means no --skill
+POSTDARE_REVIEW_REPO_DIR=/srv/repos/example  # defaults to the project's app_dir
 ```
+
+The review reads the diff from a git repository, and by default that is the project's
+`app_dir`. That only holds history when the project deploys by pulling into it: a
+project built elsewhere by CI and shipped as an artifact has no checkout there, and
+every run fails with `repo_missing` or `commit_missing`. Point
+`POSTDARE_REVIEW_REPO_DIR` at a clone of the same remote instead -- the script fetches
+from `origin` when a commit is missing, so a clone that nothing else updates still
+resolves the commit that triggered the deploy. It never prompts for credentials, so
+give that clone a remote it can read unattended.
 
 The config file wins over the environment, so leave a value out of the file to set it
 per stage. Pin `POSTDARE_REVIEW_PI_BIN` only when the binary is off PATH: an nvm path
@@ -165,8 +175,11 @@ by hand does not mean reading JSON to find out what went wrong.
 To try it by hand, supply the variables Postdare would inject:
 
 ```bash
-POSTDARE_PROJECT_DIR=/opt/postdare-go/app /opt/postdare-go/bin/ai-review
+POSTDARE_REVIEW_REPO_DIR=/srv/repos/example /opt/postdare-go/bin/ai-review
 ```
+
+With no commit range in the environment the script reviews `HEAD^..HEAD` in that
+repository, which is what a deploy for the latest push would have looked at.
 
 Configure the command as `/opt/postdare-go/bin/ai-review`, set
 `capture_as: ai_review`, `run_when: always`, and keep the Feishu outbound stage after it

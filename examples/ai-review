@@ -39,6 +39,11 @@ MODEL="${POSTDARE_REVIEW_MODEL:-litellm/glm-5.3-flash}"
 SKILL_DIR="${POSTDARE_REVIEW_SKILL_DIR:-}"
 
 PROJECT_DIR="${POSTDARE_PROJECT_DIR:-}"
+# The review reads git history, which the deploy directory only holds when the
+# project deploys by pulling into it. A project that CI builds elsewhere and ships
+# as an artifact has no checkout there at all, so point this at a clone of the
+# same remote instead.
+REPO_DIR="${POSTDARE_REVIEW_REPO_DIR:-$PROJECT_DIR}"
 BASE_COMMIT="${POSTDARE_BEFORE_COMMIT_ID:-HEAD^}"
 TARGET_COMMIT="${POSTDARE_COMMIT_ID:-HEAD}"
 
@@ -49,8 +54,9 @@ if ! command -v python3 >/dev/null 2>&1; then
   printf '%s\n' '{"report_type":"ai_review","status":"failed","conclusion":"enrichment_unavailable","summary":"缺少 python3，无法从真实 diff 截取代码摘录。","issues":[],"markdown":"","error_message":"python3 is required to attach diff excerpts"}'
   exit 0
 fi
-if [[ -z "$PROJECT_DIR" ]]; then
-  emit failed config_missing "未设置项目目录，无法定位仓库。" "POSTDARE_PROJECT_DIR is required"
+if [[ -z "$REPO_DIR" ]]; then
+  emit failed config_missing "未设置仓库目录：请填写项目的应用目录，或在配置中设置 POSTDARE_REVIEW_REPO_DIR。" \
+    "POSTDARE_PROJECT_DIR or POSTDARE_REVIEW_REPO_DIR is required"
   exit 0
 fi
 if [[ -z "$PI_BIN" || ! -x "$PI_BIN" ]]; then
@@ -63,9 +69,37 @@ if [[ -n "$SKILL_DIR" && ! -d "$SKILL_DIR" ]]; then
   exit 0
 fi
 
-cd "$PROJECT_DIR"
-if ! git rev-parse --verify "${BASE_COMMIT}^{commit}" >/dev/null 2>&1 || ! git rev-parse --verify "${TARGET_COMMIT}^{commit}" >/dev/null 2>&1; then
-  emit failed commit_missing "无法解析审查所需的基线或目标 commit。" "baseline or target commit is missing"
+if ! cd "$REPO_DIR" 2>/dev/null; then
+  emit failed repo_missing "仓库目录不存在：$REPO_DIR。" "repository directory not found: $REPO_DIR"
+  exit 0
+fi
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  emit failed repo_missing "$REPO_DIR 不是 git 仓库，读不到提交历史；请把 POSTDARE_REVIEW_REPO_DIR 指向一个克隆。" \
+    "not a git repository: $REPO_DIR"
+  exit 0
+fi
+
+# Name the commit that is actually absent: "baseline or target is missing" leaves
+# an operator guessing which one, and the answer decides whether the checkout is
+# merely stale or the wrong repository entirely.
+missing_commits() {
+  local missing=()
+  git rev-parse --verify --quiet "${BASE_COMMIT}^{commit}" >/dev/null || missing+=("base=$BASE_COMMIT")
+  git rev-parse --verify --quiet "${TARGET_COMMIT}^{commit}" >/dev/null || missing+=("target=$TARGET_COMMIT")
+  printf '%s' "${missing[*]:-}"
+}
+
+MISSING="$(missing_commits)"
+# A clone that someone else updates lags behind the push that triggered this
+# deploy, so fetch once before giving up. Never prompt for credentials: a blocked
+# prompt would hang the deploy instead of failing it.
+if [[ -n "$MISSING" ]] && git remote get-url origin >/dev/null 2>&1; then
+  GIT_TERMINAL_PROMPT=0 git fetch --quiet origin >/dev/null 2>&1 || true
+  MISSING="$(missing_commits)"
+fi
+if [[ -n "$MISSING" ]]; then
+  emit failed commit_missing "$REPO_DIR 中找不到审查所需的 commit（$MISSING）。" \
+    "missing in $REPO_DIR: $MISSING"
   exit 0
 fi
 
