@@ -1,16 +1,66 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PI_BIN="/root/.nvm/versions/node/v25.5.0/bin/pi"
-MODEL="litellm/glm-5.3-flash"
-SKILL_DIR="/root/xianhu/xianhu-server/.agents/skills/show-me"
-PROJECT_DIR="${POSTDARE_PROJECT_DIR:?POSTDARE_PROJECT_DIR is required}"
+# Every stage outcome, including a refusal to run, must reach Postdare as a report
+# object on stdout: a non-zero exit or stray text is recorded as a capture failure
+# with nothing to read. emit takes a status, conclusion, summary and error.
+emit() {
+  python3 - "$@" <<'PYEOF' 2>/dev/null || printf '{"report_type":"ai_review","status":"failed","conclusion":"%s","issues":[],"summary":"","markdown":"","error_message":"%s"}\n' "$2" "$4"
+import json, sys
+json.dump({
+    'report_type': 'ai_review',
+    'status': sys.argv[1],
+    'conclusion': sys.argv[2],
+    'summary': sys.argv[3],
+    'issues': [],
+    'markdown': '',
+    'error_message': sys.argv[4],
+}, sys.stdout, ensure_ascii=False)
+print()
+PYEOF
+}
+
+# Machine-specific settings live outside this script so CI can ship it unchanged.
+# The config file, when present, wins over the environment; leave a value out of
+# the file to set it per stage instead.
+CONFIG_FILE="${POSTDARE_REVIEW_CONFIG:-/etc/postdare-go/ai-review.env}"
+if [[ -r "$CONFIG_FILE" ]]; then
+  # shellcheck source=/dev/null
+  . "$CONFIG_FILE"
+fi
+
+PI_BIN="${POSTDARE_REVIEW_PI_BIN:-$(command -v pi 2>/dev/null || true)}"
+MODEL="${POSTDARE_REVIEW_MODEL:-litellm/glm-5.3-flash}"
+SKILL_DIR="${POSTDARE_REVIEW_SKILL_DIR:-}"
+
+PROJECT_DIR="${POSTDARE_PROJECT_DIR:-}"
 BASE_COMMIT="${POSTDARE_BEFORE_COMMIT_ID:-HEAD^}"
 TARGET_COMMIT="${POSTDARE_COMMIT_ID:-HEAD}"
 
+# python3 does more than format this message: it strips any excerpt the model
+# supplied and cuts the real one from the diff. Without it the script must not run
+# at all, or a model-written excerpt could reach the report as evidence.
+if ! command -v python3 >/dev/null 2>&1; then
+  printf '%s\n' '{"report_type":"ai_review","status":"failed","conclusion":"enrichment_unavailable","summary":"缺少 python3，无法从真实 diff 截取代码摘录。","issues":[],"markdown":"","error_message":"python3 is required to attach diff excerpts"}'
+  exit 0
+fi
+if [[ -z "$PROJECT_DIR" ]]; then
+  emit failed config_missing "未设置项目目录，无法定位仓库。" "POSTDARE_PROJECT_DIR is required"
+  exit 0
+fi
+if [[ -z "$PI_BIN" || ! -x "$PI_BIN" ]]; then
+  emit failed reviewer_missing "找不到可执行的审查程序，请设置 POSTDARE_REVIEW_PI_BIN。" \
+    "reviewer binary not executable: ${PI_BIN:-<unset>}"
+  exit 0
+fi
+if [[ -n "$SKILL_DIR" && ! -d "$SKILL_DIR" ]]; then
+  emit failed skill_missing "配置的技能目录不存在。" "skill directory not found: $SKILL_DIR"
+  exit 0
+fi
+
 cd "$PROJECT_DIR"
 if ! git rev-parse --verify "${BASE_COMMIT}^{commit}" >/dev/null 2>&1 || ! git rev-parse --verify "${TARGET_COMMIT}^{commit}" >/dev/null 2>&1; then
-  printf '%s\n' '{"report_type":"ai_review","status":"failed","conclusion":"commit_missing","summary":"无法解析审查所需的基线或目标 commit。","issues":[],"markdown":"","error_message":"baseline or target commit is missing"}'
+  emit failed commit_missing "无法解析审查所需的基线或目标 commit。" "baseline or target commit is missing"
   exit 0
 fi
 
@@ -18,7 +68,7 @@ DIFF_FILE="$(mktemp /tmp/postdare-ai-review.XXXXXX.diff)"
 trap 'rm -f "$DIFF_FILE"' EXIT
 git diff --no-ext-diff --unified=80 "${BASE_COMMIT}..${TARGET_COMMIT}" >"$DIFF_FILE"
 if [[ ! -s "$DIFF_FILE" ]]; then
-  printf '%s\n' '{"report_type":"ai_review","status":"skipped","conclusion":"no_changes","summary":"提交范围内没有可审查的代码变更。","issues":[],"markdown":"## 审查结果\n\n提交范围内没有代码差异。","error_message":""}'
+  emit skipped no_changes "提交范围内没有可审查的代码变更。" ""
   exit 0
 fi
 
@@ -140,23 +190,20 @@ json.dump(report, sys.stdout, ensure_ascii=False)
 PYEOF
 )
 
-REPORT="$("$PI_BIN" \
-  --model "$MODEL" \
-  --skill "$SKILL_DIR" \
-  --no-tools \
-  --no-context-files \
-  --no-extensions \
-  --no-session \
-  --print \
-  "@$DIFF_FILE" \
-  "$PROMPT")"
+# --skill is optional: the reviewer runs without one when no skill directory is
+# configured, so this script is not tied to any particular skill checkout.
+PI_ARGS=(--model "$MODEL" --no-tools --no-context-files --no-extensions --no-session --print)
+if [[ -n "$SKILL_DIR" ]]; then
+  PI_ARGS+=(--skill "$SKILL_DIR")
+fi
+
+if ! REPORT="$("$PI_BIN" "${PI_ARGS[@]}" "@$DIFF_FILE" "$PROMPT")"; then
+  emit failed reviewer_failed "审查程序执行失败。" "reviewer command exited non-zero"
+  exit 0
+fi
 
 # Enrichment is mandatory, not best effort. Passing the model's output straight
 # through would let a diff_hunk it invented reach the report as evidence, which
 # is the one thing this pipeline must not do.
-if ! command -v python3 >/dev/null 2>&1; then
-  printf '%s\n' '{"report_type":"ai_review","status":"failed","conclusion":"enrichment_unavailable","summary":"缺少 python3，无法从真实 diff 截取代码摘录。","issues":[],"markdown":"","error_message":"python3 is required to attach diff excerpts"}'
-  exit 0
-fi
 printf '%s' "$REPORT" | python3 -c "$ATTACH_HUNKS" "$DIFF_FILE"
 printf '\n'
