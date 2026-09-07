@@ -121,9 +121,12 @@ The raw token is never stored. Each report holds a random salt, and the token is
 derived from that salt plus `jwt.secret`, so a database copy alone yields no working
 link. Notification stages reuse the token already in force, which keeps a link that was
 already delivered to a chat channel working; only `POST .../share` rotates the salt and
-invalidates links handed out earlier. Reports shared before this change get a new link
-the next time they are notified or shared, because their original token cannot be
-recovered.
+invalidates links handed out earlier.
+
+Links shared before this change keep resolving, because verification goes through the
+stored digest. They are re-minted only if that report is shared or notified again, since
+their original token cannot be recovered. Rotating `jwt.secret` orphans every salt drawn
+under the old secret: existing links stop resolving and are re-minted on the next share.
 
 ## Logs
 

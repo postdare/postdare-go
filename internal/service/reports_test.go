@@ -222,3 +222,32 @@ func TestSaveReportPreservesShareState(t *testing.T) {
 		t.Fatalf("re-capture must not break the share link:\nbefore=%s\n after=%s", url, afterSave)
 	}
 }
+
+// Rotating jwt.secret orphans the salts drawn under the old one. Ensure must
+// notice the derived token no longer verifies and mint a working link instead of
+// handing out one that resolves to nothing.
+func TestEnsureReportShareRecoversFromSecretRotation(t *testing.T) {
+	svc := newTestService(t)
+	svc.Config.JWT.Secret = "original-secret"
+	report := model.Report{Type: model.ReportTypeAIReview, ProjectID: 1, TaskID: 3, Status: model.ReportSuccess}
+	if err := svc.DB.Create(&report).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.EnsureReportShare(context.Background(), report.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	svc.Config.JWT.Secret = "rotated-secret"
+	_, url, err := svc.EnsureReportShare(context.Background(), report.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := strings.SplitN(url, "#token=", 2)[1]
+	var stored model.Report
+	if err := svc.DB.First(&stored, report.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.ShareTokenHash != HashReportToken(token) {
+		t.Fatal("ensure handed out a link the public endpoint would reject")
+	}
+}

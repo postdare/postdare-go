@@ -36,7 +36,12 @@ func (s *Service) EnsureReportShare(ctx context.Context, reportID uint64) (model
 		return report, "", err
 	}
 	if report.ShareEnabled && report.ShareSalt != "" {
-		return report, s.reportShareURL(report.ID, s.reportShareToken(report.ID, report.ShareSalt)), nil
+		// Only reuse a token that still verifies. It will not if jwt.secret was
+		// rotated since the salt was drawn, and handing out a link that resolves
+		// to nothing is worse than minting a fresh one.
+		if token := s.reportShareToken(report.ID, report.ShareSalt); HashReportToken(token) == report.ShareTokenHash {
+			return report, s.reportShareURL(report.ID, token), nil
+		}
 	}
 	token, err := s.enableReportShare(ctx, &report)
 	if err != nil {
