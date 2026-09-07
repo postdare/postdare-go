@@ -108,14 +108,16 @@ select {
 .report-section { margin-top: 32px; }
 .report-section-title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 15px; font-weight: 600; }
 .issue-row { display: grid; grid-template-columns: 72px 1fr; gap: 16px; padding: 18px 0; }
-.issue-diff { margin-top: 12px; overflow-x: auto; border: 1px solid oklch(var(--border)); border-radius: 10px; background: oklch(var(--surface)); }
+.issue-diff { margin-top: 12px; border: 1px solid oklch(var(--border)); border-radius: 10px; background: oklch(var(--surface)); overflow: hidden; }
+.issue-diff-head { border-bottom: 1px solid oklch(var(--border)); background: oklch(var(--surface-2)); padding: 7px 12px; font-family: theme(fontFamily.mono); font-size: 12px; color: oklch(var(--ink)); }
+.issue-diff-body { overflow-x: auto; }
 .issue-diff table { width: 100%; border-collapse: collapse; font-family: theme(fontFamily.mono); font-size: 12px; line-height: 1.65; tab-size: 4; }
 .issue-diff td { vertical-align: top; }
 .issue-diff .diff-num { width: 1%; min-width: 28px; padding: 0 6px; text-align: right; white-space: nowrap; color: oklch(var(--muted) / 0.7); user-select: none; }
 .issue-diff .diff-num + .diff-num { border-right: 1px solid oklch(var(--border)); }
-.issue-diff .diff-code { width: 100%; padding: 0 12px 0 8px; white-space: pre; color: oklch(var(--ink)); }
-.issue-diff .diff-marker { display: inline-block; width: 1ch; margin-right: 6px; color: oklch(var(--muted) / 0.6); user-select: none; }
-.issue-diff .diff-meta td { padding: 2px 12px; background: oklch(var(--surface-2)); color: oklch(var(--muted)); }
+.issue-diff .diff-marker { width: 1%; padding: 0 4px 0 8px; text-align: center; color: oklch(var(--muted) / 0.6); user-select: none; }
+.issue-diff .diff-code { width: 100%; padding: 0 12px 0 4px; white-space: pre; color: oklch(var(--ink)); }
+.issue-diff .diff-meta td { padding: 3px 12px; background: oklch(var(--info) / 0.1); color: oklch(var(--info)); }
 .issue-diff .diff-add td { background: oklch(var(--success) / 0.13); }
 .issue-diff .diff-add .diff-num { background: oklch(var(--success) / 0.22); color: oklch(var(--ink) / 0.55); }
 .issue-diff .diff-add .diff-marker { color: oklch(var(--success)); }
@@ -123,6 +125,22 @@ select {
 .issue-diff .diff-del .diff-num { background: oklch(var(--danger) / 0.2); color: oklch(var(--ink) / 0.55); }
 .issue-diff .diff-del .diff-marker { color: oklch(var(--danger)); }
 .issue-diff-note { margin-top: 12px; color: oklch(var(--muted)); font-size: 12px; }
+
+/* Syntax colours for the diff excerpt. Drawn from the theme tokens rather than a
+   highlight.js stylesheet, so they follow light and dark and sit legibly on the
+   green and red row tints. */
+.issue-diff .hljs-comment, .issue-diff .hljs-quote { color: oklch(var(--muted)); font-style: italic; }
+.issue-diff .hljs-keyword, .issue-diff .hljs-selector-tag, .issue-diff .hljs-literal,
+.issue-diff .hljs-doctag, .issue-diff .hljs-meta { color: oklch(var(--primary)); }
+.issue-diff .hljs-string, .issue-diff .hljs-regexp, .issue-diff .hljs-addition { color: oklch(var(--success)); }
+.issue-diff .hljs-number, .issue-diff .hljs-symbol, .issue-diff .hljs-bullet { color: oklch(var(--warning)); }
+.issue-diff .hljs-title, .issue-diff .hljs-section, .issue-diff .hljs-name,
+.issue-diff .hljs-selector-id, .issue-diff .hljs-selector-class { color: oklch(var(--info)); }
+.issue-diff .hljs-attr, .issue-diff .hljs-attribute, .issue-diff .hljs-variable,
+.issue-diff .hljs-template-variable { color: oklch(var(--accent)); }
+.issue-diff .hljs-type, .issue-diff .hljs-built_in, .issue-diff .hljs-class { color: oklch(var(--danger)); }
+.issue-diff .hljs-emphasis { font-style: italic; }
+.issue-diff .hljs-strong { font-weight: 600; }
 .report-markdown { max-width: 76ch; color: oklch(var(--ink)); font-size: 14px; line-height: 1.75; }
 .report-markdown h1, .report-markdown h2, .report-markdown h3 { margin: 1.6em 0 .55em; font-weight: 650; line-height: 1.3; text-wrap: balance; }
 .report-markdown h1 { font-size: 22px; } .report-markdown h2 { font-size: 18px; } .report-markdown h3 { font-size: 15px; }

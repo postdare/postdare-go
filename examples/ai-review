@@ -85,8 +85,14 @@ PROMPT='审查附带的 git diff。只输出一个 JSON 对象，不要 Markdown
 ATTACH_HUNKS=$(cat <<'PYEOF'
 import json, re, sys
 
-MAX_LINES = 40
-HUNK_RE = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
+# The excerpt is centred on the reported line, not taken from the top of the hunk.
+# The diff is cut with a wide context window so the model reads enough of the file,
+# which makes hunks hundreds of lines long -- their first lines are unchanged code,
+# and an excerpt of those shows a finding with none of the change it is about.
+CONTEXT_BEFORE = 10
+CONTEXT_AFTER = 14
+HUNK_RE = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
+CHANGE_MARKERS = ('+', '-')
 
 
 def parse_diff(path):
@@ -102,12 +108,64 @@ def parse_diff(path):
                 current = files.setdefault(name, [])
             elif current is not None and HUNK_RE.match(line):
                 match = HUNK_RE.match(line)
-                start = int(match.group(1))
-                span = int(match.group(2) or 1)
-                current.append({'start': start, 'end': start + max(span, 1) - 1, 'lines': [line]})
+                old_start, new_start = int(match.group(1)), int(match.group(3))
+                span = int(match.group(4) or 1)
+                current.append({
+                    'old_start': old_start,
+                    'start': new_start,
+                    'end': new_start + max(span, 1) - 1,
+                    'lines': [],
+                })
             elif current and line[:1] in (' ', '+', '-', '\\'):
                 current[-1]['lines'].append(line)
     return files
+
+
+def number_rows(hunk):
+    """Pair each hunk line with its old- and new-side numbers, as a diff view reads it."""
+    old_number, new_number = hunk['old_start'], hunk['start']
+    rows = []
+    for line in hunk['lines']:
+        marker = line[:1]
+        if marker == '+':
+            rows.append((line, None, new_number))
+            new_number += 1
+        elif marker == '-':
+            rows.append((line, old_number, None))
+            old_number += 1
+        elif marker == '\\':
+            rows.append((line, None, None))
+        else:
+            rows.append((line, old_number, new_number))
+            old_number += 1
+            new_number += 1
+    return rows
+
+
+def window_around(rows, target):
+    """Cut the lines around target, keeping at least one changed line in view.
+
+    A model's line number is often a little off, so an exact window can still land
+    entirely in context. Falling back to the nearest change keeps the excerpt about
+    something rather than about nothing.
+    """
+    changed = [i for i, (line, _, _) in enumerate(rows) if line[:1] in CHANGE_MARKERS]
+    if not changed:
+        return ''
+    focus = next((i for i, (_, _, new) in enumerate(rows) if new == target), changed[0])
+    start = max(0, focus - CONTEXT_BEFORE)
+    end = min(len(rows), focus + CONTEXT_AFTER + 1)
+    if not any(rows[i][0][:1] in CHANGE_MARKERS for i in range(start, end)):
+        focus = min(changed, key=lambda index: abs(index - focus))
+        start = max(0, focus - CONTEXT_BEFORE)
+        end = min(len(rows), focus + CONTEXT_AFTER + 1)
+    view = rows[start:end]
+    old_first = next((old for _, old, _ in view if old is not None), 0)
+    new_first = next((new for _, _, new in view if new is not None), 0)
+    old_count = sum(1 for _, old, _ in view if old is not None)
+    new_count = sum(1 for _, _, new in view if new is not None)
+    header = '@@ -%d,%d +%d,%d @@' % (old_first, old_count, new_first, new_count)
+    return '\n'.join([header] + [line for line, _, _ in view])
 
 
 def find_hunk(files, location):
@@ -120,7 +178,7 @@ def find_hunk(files, location):
             continue
         for hunk in hunks:
             if hunk['start'] <= number <= hunk['end']:
-                return '\n'.join(hunk['lines'][:MAX_LINES])
+                return window_around(number_rows(hunk), number)
     return ''
 
 

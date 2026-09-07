@@ -114,7 +114,10 @@ Each issue may carry a `diff_hunk`: the excerpt of the reviewed diff the finding
 refers to, which makes a finding checkable instead of an assertion to take on trust.
 A capture script must cut it from the real diff by the reported location rather than
 let the model reproduce it, or the excerpt can be hallucinated and is then worse than
-none. Excerpts are capped at 40 lines each and 64 KiB per report. Neither limit discards a
+none. Cut it *around* that location, not from the top of the hunk: the example script
+diffs with a wide context window so the model reads enough of the file, which makes a
+hunk hundreds of lines long, and its opening lines are unchanged code. An excerpt of
+those shows a finding with none of the change it is about. Excerpts are capped at 40 lines each and 64 KiB per report. Neither limit discards a
 review or a finding, and neither cut is silent: an excerpt past the line cap ends with
 `... truncated`, and one the report budget cannot hold is replaced by
 `... excerpt omitted: report excerpt budget reached`, so a reader can always tell a
