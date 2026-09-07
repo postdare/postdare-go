@@ -125,6 +125,22 @@ select {
 .issue-diff .diff-del .diff-num { background: oklch(var(--danger) / 0.2); color: oklch(var(--ink) / 0.55); }
 .issue-diff .diff-del .diff-marker { color: oklch(var(--danger)); }
 .issue-diff-note { margin-top: 12px; color: oklch(var(--muted)); font-size: 12px; }
+
+/* Syntax colours for the diff excerpt. Drawn from the theme tokens rather than a
+   highlight.js stylesheet, so they follow light and dark and sit legibly on the
+   green and red row tints. */
+.issue-diff .hljs-comment, .issue-diff .hljs-quote { color: oklch(var(--muted)); font-style: italic; }
+.issue-diff .hljs-keyword, .issue-diff .hljs-selector-tag, .issue-diff .hljs-literal,
+.issue-diff .hljs-doctag, .issue-diff .hljs-meta { color: oklch(var(--primary)); }
+.issue-diff .hljs-string, .issue-diff .hljs-regexp, .issue-diff .hljs-addition { color: oklch(var(--success)); }
+.issue-diff .hljs-number, .issue-diff .hljs-symbol, .issue-diff .hljs-bullet { color: oklch(var(--warning)); }
+.issue-diff .hljs-title, .issue-diff .hljs-section, .issue-diff .hljs-name,
+.issue-diff .hljs-selector-id, .issue-diff .hljs-selector-class { color: oklch(var(--info)); }
+.issue-diff .hljs-attr, .issue-diff .hljs-attribute, .issue-diff .hljs-variable,
+.issue-diff .hljs-template-variable { color: oklch(var(--accent)); }
+.issue-diff .hljs-type, .issue-diff .hljs-built_in, .issue-diff .hljs-class { color: oklch(var(--danger)); }
+.issue-diff .hljs-emphasis { font-style: italic; }
+.issue-diff .hljs-strong { font-weight: 600; }
 .report-markdown { max-width: 76ch; color: oklch(var(--ink)); font-size: 14px; line-height: 1.75; }
 .report-markdown h1, .report-markdown h2, .report-markdown h3 { margin: 1.6em 0 .55em; font-weight: 650; line-height: 1.3; text-wrap: balance; }
 .report-markdown h1 { font-size: 22px; } .report-markdown h2 { font-size: 18px; } .report-markdown h3 { font-size: 15px; }
