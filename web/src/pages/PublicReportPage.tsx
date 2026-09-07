@@ -10,6 +10,14 @@ import { getPublicReport } from "../api/postdareGo";
 import type { ReportIssue } from "../api/types";
 import { Badge } from "../components/ui/badge";
 
+// Display names for the report types the server can produce; keep in sync with
+// model.ReportTypes(). An unknown type still renders, just without a name.
+const reportTypeLabels: Record<string, string> = {
+  ai_review: "Code review report",
+};
+
+const reportTypeLabel = (type: string) => reportTypeLabels[type] ?? "Report";
+
 function consumeReportToken(reportId: string) {
   const storageKey = `postdare.report.${reportId}`;
   const fragment = new URLSearchParams(window.location.hash.slice(1));
@@ -52,10 +60,10 @@ export function PublicReportPage() {
             <div className="report-mark" aria-hidden="true"><FileSearch className="h-5 w-5" /></div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-xl font-semibold tracking-[-0.02em]">{data.project_name || "AI review"}</h1>
+                <h1 className="truncate text-xl font-semibold tracking-[-0.02em]">{data.project_name || reportTypeLabel(data.type)}</h1>
                 <Badge tone={data.status === "success" ? "success" : data.status === "failed" ? "failed" : "canceled"}>{data.status}</Badge>
               </div>
-              <p className="mt-1 text-sm text-muted">AI code review report</p>
+              <p className="mt-1 text-sm text-muted">{reportTypeLabel(data.type)}</p>
             </div>
           </div>
           <div className="report-commit">

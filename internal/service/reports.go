@@ -70,7 +70,7 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 	if task.TriggerType == model.TriggerRollback {
 		report.Status = model.ReportSkipped
 		report.Conclusion = "skipped"
-		report.Summary = "AI review is skipped for rollback tasks."
+		report.Summary = "Report is skipped for rollback tasks."
 		_ = s.saveReport(context.Background(), &report)
 		finish(model.StageSkipped, nil)
 		runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "report skipped for rollback task")
@@ -103,7 +103,7 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 	report.Markdown = captured.Markdown
 	report.ErrorMessage = strings.TrimSpace(captured.ErrorMessage)
 	if report.Status == model.ReportFailed && report.ErrorMessage == "" {
-		report.ErrorMessage = "AI review reported a failure"
+		report.ErrorMessage = "the report command reported a failure"
 	}
 	if err := s.saveReport(context.Background(), &report); err != nil {
 		finish(model.StageFailed, err)
