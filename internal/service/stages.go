@@ -39,12 +39,7 @@ func (s *Service) runCommandStage(ctx context.Context, project model.Project, ta
 		return stageOK, nil
 	}
 	runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "stage started")
-	var err error
-	if environmentRunner, ok := s.Runner.(runner.EnvironmentCommandRunner); ok {
-		err = environmentRunner.RunWithEnv(ctx, task.ID, name, command, reportCommandEnv(project, *task))
-	} else {
-		err = s.Runner.Run(ctx, task.ID, name, command)
-	}
+	err := s.Runner.RunWithEnv(ctx, task.ID, name, command, stageCommandEnv(project, *task))
 	now := time.Now()
 	stage.FinishedAt = &now
 	if err != nil {
@@ -127,8 +122,8 @@ func (s *Service) runProjectStage(ctx context.Context, project model.Project, ta
 		if err != nil {
 			return stageFailed, err
 		}
-		if cfg.CaptureAs == "report" {
-			return s.runReportCommandStage(ctx, project, task, stage.Name, cfg.Command)
+		if reportType := model.NormalizeReportType(cfg.CaptureAs); reportType != "" {
+			return s.runReportCommandStage(ctx, project, task, stage.Name, cfg.Command, reportType)
 		}
 		return s.runCommandStage(ctx, project, task, stage.Name, cfg.Command)
 	case model.ProjectStageTypeHealthCheck:

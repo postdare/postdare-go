@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -31,6 +32,15 @@ const (
 	ReportSuccess      = "success"
 	ReportFailed       = "failed"
 	ReportSkipped      = "skipped"
+
+	// CaptureAsReportLegacy is the capture_as value shipped by the first release
+	// of the report pipeline, when "report" implicitly meant an AI review. It is
+	// still accepted so existing project configurations keep working.
+	CaptureAsReportLegacy = "report"
+
+	SeverityHigh   = "high"
+	SeverityMedium = "medium"
+	SeverityLow    = "low"
 
 	ProjectStageTypeCommand         = "command"
 	ProjectStageTypeHealthCheck     = "health_check"
@@ -148,6 +158,57 @@ type WebhookEvent struct {
 	CreatedAt      time.Time       `gorm:"index:idx_webhook_events_created_at" json:"created_at"`
 }
 
+// ReportTypes lists the report kinds a command stage may capture. A stage's
+// capture_as value names the type directly, so adding a kind here is all the
+// capture pipeline needs to accept, store and serve it.
+func ReportTypes() []string {
+	return []string{ReportTypeAIReview}
+}
+
+// NormalizeReportType maps a capture_as value to a report type, returning ""
+// when the stage captures nothing or names an unknown kind.
+func NormalizeReportType(captureAs string) string {
+	value := strings.ToLower(strings.TrimSpace(captureAs))
+	if value == CaptureAsReportLegacy {
+		return ReportTypeAIReview
+	}
+	for _, reportType := range ReportTypes() {
+		if value == reportType {
+			return reportType
+		}
+	}
+	return ""
+}
+
+// Severities lists issue severities from most to least serious. Callers rely on
+// the ordering when ranking issues for a notification.
+func Severities() []string {
+	return []string{SeverityHigh, SeverityMedium, SeverityLow}
+}
+
+// NormalizeSeverity coerces a severity reported by a capture script to a known
+// value, defaulting to the least serious one.
+func NormalizeSeverity(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	for _, severity := range Severities() {
+		if normalized == severity {
+			return severity
+		}
+	}
+	return SeverityLow
+}
+
+// IsSeverity reports whether value is a severity a capture script may use.
+func IsSeverity(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	for _, severity := range Severities() {
+		if normalized == severity {
+			return true
+		}
+	}
+	return false
+}
+
 type ReportIssue struct {
 	Severity   string `json:"severity"`
 	Title      string `json:"title"`
@@ -157,8 +218,9 @@ type ReportIssue struct {
 	Suggestion string `json:"suggestion,omitempty"`
 }
 
-// Report stores a structured artifact produced by a deploy stage. ShareTokenHash
-// is intentionally never serialized; the raw token is only returned when rotated.
+// Report stores a structured artifact produced by a deploy stage. The raw share
+// token is never stored or serialized: ShareSalt plus the server secret derive
+// it on demand and ShareTokenHash verifies it.
 type Report struct {
 	ID             uint64        `gorm:"primaryKey" json:"id"`
 	Type           string        `gorm:"size:50;not null;uniqueIndex:idx_reports_task_type" json:"type"`
@@ -172,6 +234,7 @@ type Report struct {
 	Issues         []ReportIssue `gorm:"serializer:json;type:json" json:"issues"`
 	Markdown       string        `gorm:"type:longtext" json:"markdown"`
 	ErrorMessage   string        `gorm:"type:text" json:"error_message,omitempty"`
+	ShareSalt      string        `gorm:"size:64" json:"-"`
 	ShareTokenHash string        `gorm:"size:64" json:"-"`
 	ShareEnabled   bool          `gorm:"not null;default:false" json:"share_enabled"`
 	CreatedAt      time.Time     `json:"created_at"`

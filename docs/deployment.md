@@ -83,10 +83,15 @@ configuration.
 
 ### AI review report
 
-Command stages may set `config.capture_as: report`. Postdare captures at most 2 MiB of
-stdout as structured JSON and keeps it out of the deploy log; stderr remains in the log.
-The runner injects `POSTDARE_TASK_ID`, `POSTDARE_TRIGGER_TYPE`,
-`POSTDARE_PROJECT_DIR`, `POSTDARE_COMMIT_ID`, and
+Command stages may set `config.capture_as` to the report type they produce; the only
+type today is `ai_review`. Postdare captures at most 2 MiB of stdout as structured JSON
+and keeps it out of the deploy log; stderr remains in the log. The script's
+`report_type` field must match the stage's `capture_as`, otherwise the capture is
+recorded as failed. The value `report` is the legacy spelling of `ai_review` and is
+still accepted, so project configurations written before this change keep working.
+
+Every command stage -- not only report stages -- receives `POSTDARE_TASK_ID`,
+`POSTDARE_TRIGGER_TYPE`, `POSTDARE_PROJECT_DIR`, `POSTDARE_COMMIT_ID`, and
 `POSTDARE_BEFORE_COMMIT_ID`. Webhook deploys use the full `before..after` range;
 manual and MCP deploys use `HEAD^..HEAD`. Report-stage failures never change the
 deployment result.
@@ -98,7 +103,7 @@ sudo install -m 0755 examples/ai-review-xianhu /opt/postdare-go/bin/ai-review-xi
 ```
 
 Configure the command as `/opt/postdare-go/bin/ai-review-xianhu`, set
-`capture_as: report`, `run_when: always`, and keep the Feishu outbound stage after it
+`capture_as: ai_review`, `run_when: always`, and keep the Feishu outbound stage after it
 with template `feishu_report_card`. Set `server.public_url` to the externally reachable
 HTTPS origin so the card can link to `/reports/{report_id}`.
 
@@ -110,7 +115,15 @@ Authenticated report endpoints are:
 - `DELETE /api/v1/reports/{report_id}/share`
 
 The public page calls `GET /api/v1/public/reports/{report_id}` with the token in the
-`X-Report-Token` header. Only the SHA-256 token digest is stored in the database.
+`X-Report-Token` header.
+
+The raw token is never stored. Each report holds a random salt, and the token is
+derived from that salt plus `jwt.secret`, so a database copy alone yields no working
+link. Notification stages reuse the token already in force, which keeps a link that was
+already delivered to a chat channel working; only `POST .../share` rotates the salt and
+invalidates links handed out earlier. Reports shared before this change get a new link
+the next time they are notified or shared, because their original token cannot be
+recovered.
 
 ## Logs
 

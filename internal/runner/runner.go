@@ -20,15 +20,14 @@ import (
 	"github.com/hellodeveye/postdare-go/internal/sse"
 )
 
+// CommandRunner executes a project's shell-command stages. Every method shares
+// the same execution semantics -- bash -lc, its own process group, the task's
+// log file and the configured timeout -- and differs only in where the command's
+// stdout goes: Run and RunWithEnv stream it into the deploy log, RunCapture
+// diverts it to the caller so structured output never reaches the log.
 type CommandRunner interface {
 	Run(ctx context.Context, taskID uint64, stage string, command string) error
-}
-
-type EnvironmentCommandRunner interface {
 	RunWithEnv(ctx context.Context, taskID uint64, stage string, command string, env map[string]string) error
-}
-
-type CaptureCommandRunner interface {
 	RunCapture(ctx context.Context, taskID uint64, stage string, command string, env map[string]string, maxBytes int64) ([]byte, error)
 }
 
@@ -44,6 +43,26 @@ func (r *LocalCommandRunner) Run(parent context.Context, taskID uint64, stage st
 }
 
 func (r *LocalCommandRunner) RunWithEnv(parent context.Context, taskID uint64, stage string, command string, env map[string]string) error {
+	return r.run(parent, taskID, stage, command, env, nil)
+}
+
+// RunCapture keeps stdout out of the deploy log and returns it to the caller.
+// stderr remains visible in the log so operators can diagnose a failed script.
+func (r *LocalCommandRunner) RunCapture(parent context.Context, taskID uint64, stage string, command string, env map[string]string, maxBytes int64) ([]byte, error) {
+	if command == "" {
+		return nil, nil
+	}
+	capture := &cappedBuffer{max: maxBytes}
+	if err := r.run(parent, taskID, stage, command, env, capture); err != nil {
+		return nil, err
+	}
+	return capture.Bytes(), nil
+}
+
+// run is the single execution path behind every CommandRunner method. When
+// capture is nil the command's stdout is streamed into the task log line by
+// line; otherwise it is buffered into capture and only stderr reaches the log.
+func (r *LocalCommandRunner) run(parent context.Context, taskID uint64, stage string, command string, env map[string]string, capture *cappedBuffer) error {
 	if command == "" {
 		return nil
 	}
@@ -56,7 +75,7 @@ func (r *LocalCommandRunner) RunWithEnv(parent context.Context, taskID uint64, s
 	if err := os.MkdirAll(r.LogDir, 0o755); err != nil {
 		return err
 	}
-	logPath := filepath.Join(r.LogDir, fmt.Sprintf("%d.log", taskID))
+	logPath := filepath.Join(r.LogDir, strconv.FormatUint(taskID, 10)+".log")
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
@@ -93,7 +112,14 @@ func (r *LocalCommandRunner) RunWithEnv(parent context.Context, taskID uint64, s
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go scanPipe(stdout, &wg, writeLine)
+	if capture != nil {
+		go func() {
+			defer wg.Done()
+			_, _ = capture.ReadFrom(stdout)
+		}()
+	} else {
+		go scanPipe(stdout, &wg, writeLine)
+	}
 	go scanPipe(stderr, &wg, writeLine)
 	wg.Wait()
 
@@ -107,100 +133,26 @@ func (r *LocalCommandRunner) RunWithEnv(parent context.Context, taskID uint64, s
 		writeLine("command canceled")
 		return fmt.Errorf("command canceled")
 	}
-	if err != nil {
-		exitCode := -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
-				exitCode = status.ExitStatus()
-			}
-		}
-		writeLine(fmt.Sprintf("command exited with code %d", exitCode))
-		return fmt.Errorf("command exited with code %d: %w", exitCode, err)
+	if capture != nil && capture.exceeded {
+		writeLine("captured stdout exceeded limit")
+		return fmt.Errorf("captured stdout exceeds %d bytes", capture.max)
 	}
-	writeLine("stage command completed")
+	if err != nil {
+		writeLine(fmt.Sprintf("command exited with code %d", exitCode(err)))
+		return fmt.Errorf("command exited with code %d: %w", exitCode(err), err)
+	}
+	if capture == nil {
+		writeLine("stage command completed")
+	}
 	return nil
 }
 
-// RunCapture keeps stdout out of the deploy log and returns it to the caller.
-// stderr remains visible in the log so operators can diagnose a failed script.
-func (r *LocalCommandRunner) RunCapture(parent context.Context, taskID uint64, stage string, command string, env map[string]string, maxBytes int64) ([]byte, error) {
-	if command == "" {
-		return nil, nil
+func exitCode(err error) int {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode()
 	}
-	if r.Timeout == 0 {
-		r.Timeout = 30 * time.Minute
-	}
-	ctx, cancel := context.WithTimeout(parent, r.Timeout)
-	defer cancel()
-	if err := os.MkdirAll(r.LogDir, 0o755); err != nil {
-		return nil, err
-	}
-	logPath := filepath.Join(r.LogDir, strconv.FormatUint(taskID, 10)+".log")
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	cmd := exec.CommandContext(ctx, "bash", "-lc", command)
-	cmd.Env = append(os.Environ(), envPairs(env)...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	waitDone := make(chan struct{})
-	go terminateProcessGroupOnCancel(ctx, cmd, waitDone)
-
-	writeError := func(line string) {
-		formatted := fmt.Sprintf("[%s] %s\n", stage, line)
-		_, _ = file.WriteString(formatted)
-		if r.Hub != nil {
-			r.Hub.Publish(sse.DeployTopic(taskID), formatted)
-		}
-	}
-	var output cappedBuffer
-	output.max = maxBytes
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		_, _ = output.ReadFrom(stdout)
-	}()
-	go scanPipe(stderr, &wg, writeError)
-	wg.Wait()
-	err = cmd.Wait()
-	close(waitDone)
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		writeError("command timeout")
-		return nil, fmt.Errorf("command timeout after %s", r.Timeout)
-	}
-	if errors.Is(ctx.Err(), context.Canceled) {
-		writeError("command canceled")
-		return nil, fmt.Errorf("command canceled")
-	}
-	if output.exceeded {
-		writeError("captured stdout exceeded limit")
-		return nil, fmt.Errorf("captured stdout exceeds %d bytes", maxBytes)
-	}
-	if err != nil {
-		exitCode := -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			exitCode = exitErr.ExitCode()
-		}
-		writeError(fmt.Sprintf("command exited with code %d", exitCode))
-		return nil, fmt.Errorf("command exited with code %d: %w", exitCode, err)
-	}
-	return output.Bytes(), nil
+	return -1
 }
 
 type cappedBuffer struct {
@@ -209,7 +161,7 @@ type cappedBuffer struct {
 	exceeded bool
 }
 
-func (b *cappedBuffer) ReadFrom(src interface{ Read([]byte) (int, error) }) (int64, error) {
+func (b *cappedBuffer) ReadFrom(src io.Reader) (int64, error) {
 	buf := make([]byte, 32*1024)
 	var total int64
 	for {
@@ -265,7 +217,7 @@ func terminateProcessGroupOnCancel(ctx context.Context, cmd *exec.Cmd, waitDone 
 	}
 }
 
-func scanPipe(pipe interface{ Read([]byte) (int, error) }, wg *sync.WaitGroup, writeLine func(string)) {
+func scanPipe(pipe io.Reader, wg *sync.WaitGroup, writeLine func(string)) {
 	defer wg.Done()
 	scanner := bufio.NewScanner(pipe)
 	buffer := make([]byte, 0, 64*1024)

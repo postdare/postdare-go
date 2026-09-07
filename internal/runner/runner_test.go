@@ -91,3 +91,44 @@ func processExists(pid int) bool {
 	err := syscall.Kill(pid, 0)
 	return err == nil
 }
+
+// Run, RunWithEnv and RunCapture share one execution path; this pins the part
+// that differs between them -- where stdout goes -- plus the env both inject.
+func TestLocalCommandRunnerSharedPathRoutesStdoutAndEnv(t *testing.T) {
+	tmp := t.TempDir()
+	r := &LocalCommandRunner{LogDir: tmp, Timeout: time.Minute}
+	env := map[string]string{"POSTDARE_COMMIT_ID": "abc123"}
+
+	if err := r.RunWithEnv(context.Background(), 11, "build", `printf 'commit=%s\n' "$POSTDARE_COMMIT_ID"`, env); err != nil {
+		t.Fatal(err)
+	}
+	streamed, err := os.ReadFile(filepath.Join(tmp, "11.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(streamed), "[build] commit=abc123") {
+		t.Fatalf("stdout should reach the deploy log: %q", streamed)
+	}
+	if !strings.Contains(string(streamed), "stage command completed") {
+		t.Fatalf("streamed stage should log completion: %q", streamed)
+	}
+
+	output, err := r.RunCapture(context.Background(), 12, "review", `printf 'commit=%s' "$POSTDARE_COMMIT_ID"`, env, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(output) != "commit=abc123" {
+		t.Fatalf("capture should receive stdout and env, got %q", output)
+	}
+	captured, err := os.ReadFile(filepath.Join(tmp, "12.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(captured), "commit=abc123") {
+		t.Fatalf("captured stdout must stay out of the deploy log: %q", captured)
+	}
+
+	if err := r.Run(context.Background(), 13, "fail", "exit 3"); err == nil || !strings.Contains(err.Error(), "code 3") {
+		t.Fatalf("expected exit code 3, got %v", err)
+	}
+}

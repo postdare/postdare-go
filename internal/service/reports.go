@@ -26,7 +26,14 @@ type capturedReport struct {
 	ErrorMessage string              `json:"error_message"`
 }
 
-func (s *Service) runReportCommandStage(ctx context.Context, project model.Project, task *model.DeployTask, name, command string) (stageOutcome, error) {
+// runReportCommandStage runs a command stage whose stdout is a structured report
+// and records the result as a model.Report. reportType comes from the stage's
+// capture_as value and is both the stored type and the contract the script's
+// report_type field must match.
+//
+// It always reports stageOK: a report is an artifact of the deploy, not a gate on
+// it, so a failed capture is recorded on the Report row and left there.
+func (s *Service) runReportCommandStage(ctx context.Context, project model.Project, task *model.DeployTask, name, command, reportType string) (stageOutcome, error) {
 	stage := s.startStage(ctx, task, name)
 	finish := func(status string, err error) {
 		now := time.Now()
@@ -43,13 +50,23 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 
 	base, target := reportCommitRange(*task)
 	report := model.Report{
-		Type:           model.ReportTypeAIReview,
+		Type:           reportType,
 		ProjectID:      project.ID,
 		TaskID:         task.ID,
 		CommitID:       target,
 		BeforeCommitID: base,
 		Status:         model.ReportFailed,
 	}
+	// fail records why the capture produced no report, on the Report row and in
+	// the deploy log, then closes the stage.
+	fail := func(err error) (stageOutcome, error) {
+		report.ErrorMessage = err.Error()
+		_ = s.saveReport(context.Background(), &report)
+		finish(model.StageFailed, err)
+		runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "report capture failed: "+err.Error())
+		return stageOK, nil
+	}
+
 	if task.TriggerType == model.TriggerRollback {
 		report.Status = model.ReportSkipped
 		report.Conclusion = "skipped"
@@ -60,53 +77,25 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 		return stageOK, nil
 	}
 	if strings.TrimSpace(command) == "" {
-		err := fmt.Errorf("report command is empty")
-		report.ErrorMessage = err.Error()
-		_ = s.saveReport(context.Background(), &report)
-		finish(model.StageFailed, err)
-		return stageOK, nil
+		return fail(fmt.Errorf("report command is empty"))
 	}
 	if task.TriggerType == model.TriggerWebhook && (!validCommit(base) || !validCommit(target)) {
-		err := fmt.Errorf("webhook report requires before and target commit ids")
-		report.ErrorMessage = err.Error()
-		_ = s.saveReport(context.Background(), &report)
-		finish(model.StageFailed, err)
-		runner.AppendLog(task.LogFile, s.Hub, task.ID, name, err.Error())
-		return stageOK, nil
-	}
-	capturingRunner, ok := s.Runner.(runner.CaptureCommandRunner)
-	if !ok {
-		err := fmt.Errorf("configured command runner does not support report capture")
-		report.ErrorMessage = err.Error()
-		_ = s.saveReport(context.Background(), &report)
-		finish(model.StageFailed, err)
-		return stageOK, nil
+		return fail(fmt.Errorf("webhook report requires before and target commit ids"))
 	}
 
 	runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "report capture started")
-	raw, err := capturingRunner.RunCapture(ctx, task.ID, name, command, reportCommandEnv(project, *task), maxReportOutputBytes)
+	raw, err := s.Runner.RunCapture(ctx, task.ID, name, command, stageCommandEnv(project, *task), maxReportOutputBytes)
 	if err != nil {
-		report.ErrorMessage = err.Error()
-		_ = s.saveReport(context.Background(), &report)
-		finish(model.StageFailed, err)
-		runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "report capture failed: "+err.Error())
-		return stageOK, nil
+		return fail(err)
 	}
 	var captured capturedReport
 	if err := json.Unmarshal(raw, &captured); err != nil {
-		err = fmt.Errorf("report command returned invalid JSON: %w", err)
-		report.ErrorMessage = err.Error()
-		_ = s.saveReport(context.Background(), &report)
-		finish(model.StageFailed, err)
-		runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "report capture failed: invalid JSON")
-		return stageOK, nil
+		return fail(fmt.Errorf("report command returned invalid JSON: %w", err))
 	}
-	if err = validateCapturedReport(captured); err != nil {
-		report.ErrorMessage = err.Error()
-		_ = s.saveReport(context.Background(), &report)
-		finish(model.StageFailed, err)
-		return stageOK, nil
+	if err := validateCapturedReport(captured, reportType); err != nil {
+		return fail(err)
 	}
+
 	report.Status = normalizeReportStatus(captured.Status)
 	report.Conclusion = strings.TrimSpace(captured.Conclusion)
 	report.Summary = strings.TrimSpace(captured.Summary)
@@ -120,21 +109,21 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 		finish(model.StageFailed, err)
 		return stageOK, nil
 	}
-	if report.Status == model.ReportFailed {
-		err := fmt.Errorf("%s", report.ErrorMessage)
-		finish(model.StageFailed, err)
-	} else if report.Status == model.ReportSkipped {
+	switch report.Status {
+	case model.ReportFailed:
+		finish(model.StageFailed, fmt.Errorf("%s", report.ErrorMessage))
+	case model.ReportSkipped:
 		finish(model.StageSkipped, nil)
-	} else {
+	default:
 		finish(model.StageSuccess, nil)
 	}
 	runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "report captured")
 	return stageOK, nil
 }
 
-func validateCapturedReport(report capturedReport) error {
-	if report.ReportType != model.ReportTypeAIReview {
-		return fmt.Errorf("report_type must be %q", model.ReportTypeAIReview)
+func validateCapturedReport(report capturedReport, reportType string) error {
+	if report.ReportType != reportType {
+		return fmt.Errorf("report_type must be %q", reportType)
 	}
 	switch strings.ToLower(strings.TrimSpace(report.Status)) {
 	case model.ReportSuccess, model.ReportFailed, model.ReportSkipped:
@@ -148,9 +137,7 @@ func validateCapturedReport(report capturedReport) error {
 		if strings.TrimSpace(issue.Title) == "" {
 			return fmt.Errorf("report issue %d title is required", i)
 		}
-		switch strings.ToLower(strings.TrimSpace(issue.Severity)) {
-		case "high", "medium", "low":
-		default:
+		if !model.IsSeverity(issue.Severity) {
 			return fmt.Errorf("report issue %d severity is invalid", i)
 		}
 	}
@@ -164,7 +151,9 @@ func reportCommitRange(task model.DeployTask) (string, string) {
 	return "HEAD^", "HEAD"
 }
 
-func reportCommandEnv(project model.Project, task model.DeployTask) map[string]string {
+// stageCommandEnv is injected into every command stage so scripts can locate the
+// project checkout and the commit range the task is deploying.
+func stageCommandEnv(project model.Project, task model.DeployTask) map[string]string {
 	base, target := reportCommitRange(task)
 	return map[string]string{
 		"POSTDARE_TASK_ID":          strconv.FormatUint(task.ID, 10),
@@ -175,6 +164,8 @@ func reportCommandEnv(project model.Project, task model.DeployTask) map[string]s
 	}
 }
 
+// validCommit rejects both an empty commit id and the all-zero sha that Git
+// hosts send as the "before" commit when a branch is first created.
 func validCommit(value string) bool {
 	value = strings.TrimSpace(value)
 	return value != "" && strings.Trim(value, "0") != ""
@@ -196,12 +187,7 @@ func normalizeReportIssues(issues []model.ReportIssue) []model.ReportIssue {
 		return []model.ReportIssue{}
 	}
 	for i := range issues {
-		issues[i].Severity = strings.ToLower(strings.TrimSpace(issues[i].Severity))
-		switch issues[i].Severity {
-		case "high", "medium", "low":
-		default:
-			issues[i].Severity = "low"
-		}
+		issues[i].Severity = model.NormalizeSeverity(issues[i].Severity)
 	}
 	return issues
 }
@@ -213,6 +199,7 @@ func (s *Service) saveReport(ctx context.Context, report *model.Report) error {
 		report.ID = existing.ID
 		report.CreatedAt = existing.CreatedAt
 		report.ShareEnabled = existing.ShareEnabled
+		report.ShareSalt = existing.ShareSalt
 		report.ShareTokenHash = existing.ShareTokenHash
 		return s.DB.WithContext(ctx).Save(report).Error
 	}

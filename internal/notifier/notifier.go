@@ -24,6 +24,21 @@ const (
 	TemplateGenericJSON      = "generic_json"
 )
 
+// Templates lists the outbound webhook payload formats a stage may select.
+func Templates() []string {
+	return []string{TemplateDingTalkText, TemplateWeComText, TemplateFeishuText, TemplateFeishuReportCard, TemplateGenericJSON}
+}
+
+// IsTemplate reports whether name is a payload format this package can render.
+func IsTemplate(name string) bool {
+	for _, template := range Templates() {
+		if name == template {
+			return true
+		}
+	}
+	return false
+}
+
 const defaultMessageTemplate = `Postdare Go {{ .Scene }}
 项目: {{ .Project.Name }}
 Git: {{ .Task.GitProvider }}
@@ -185,7 +200,10 @@ func feishuReportCard(project model.Project, task model.DeployTask, report *mode
 	status := "报告失败"
 	conclusion := "failed"
 	summary := "AI 审查报告未生成，请查看部署阶段日志。"
-	counts := map[string]int{"high": 0, "medium": 0, "low": 0}
+	counts := map[string]int{}
+	for _, severity := range model.Severities() {
+		counts[severity] = 0
+	}
 	issues := []model.ReportIssue{}
 	if report != nil {
 		status = report.Status
@@ -202,7 +220,7 @@ func feishuReportCard(project model.Project, task model.DeployTask, report *mode
 	headerColor := "grey"
 	if report != nil && report.Status == model.ReportSuccess {
 		switch {
-		case counts["high"] > 0:
+		case counts[model.SeverityHigh] > 0:
 			headerColor = "red"
 		case len(issues) > 0:
 			headerColor = "orange"
@@ -213,11 +231,13 @@ func feishuReportCard(project model.Project, task model.DeployTask, report *mode
 	elements := []interface{}{
 		map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": fmt.Sprintf("**部署状态** %s\n**项目** %s\n**分支** %s\n**Commit** `%s`", task.Status, project.Name, task.Branch, shortCommit(task.CommitID))}},
 		map[string]interface{}{"tag": "hr"},
-		map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": fmt.Sprintf("**报告类型** AI Review\n**审查结论** %s\n**风险** 高 %d · 中 %d · 低 %d", conclusion, counts["high"], counts["medium"], counts["low"])}},
+		map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": fmt.Sprintf("**报告类型** AI Review\n**审查结论** %s\n**风险** 高 %d · 中 %d · 低 %d", conclusion, counts[model.SeverityHigh], counts[model.SeverityMedium], counts[model.SeverityLow])}},
 		map[string]interface{}{"tag": "div", "text": map[string]string{"tag": "lark_md", "content": summary}},
 	}
 	highlights := make([]string, 0, 3)
-	for _, severity := range []string{"high", "medium", "low"} {
+	// model.Severities is ordered most serious first, so the card highlights the
+	// three issues that matter most.
+	for _, severity := range model.Severities() {
 		for _, issue := range issues {
 			if issue.Severity == severity && len(highlights) < 3 {
 				highlights = append(highlights, fmt.Sprintf("• **%s** %s", strings.ToUpper(issue.Severity), issue.Title))
