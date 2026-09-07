@@ -122,3 +122,21 @@ func responseString(t *testing.T, response *httptest.ResponseRecorder, key strin
 	value, _ := body.Data[key].(string)
 	return value
 }
+
+// A report shared before share salts existed has a token digest but no salt.
+// Its link must keep resolving after the upgrade: verification goes through the
+// stored digest, which the new derivation scheme leaves untouched.
+func TestPublicReportAcceptsPreUpgradeToken(t *testing.T) {
+	database, router, report := setupReportHandlerTest(t)
+	legacyToken := "0Vv0legacy-token-minted-before-the-salt-column"
+	if err := database.Model(&model.Report{}).Where("id = ?", report.ID).Updates(map[string]interface{}{
+		"share_enabled":    true,
+		"share_token_hash": service.HashReportToken(legacyToken),
+		"share_salt":       "",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got := performReportRequest(router, http.MethodGet, "/public/reports/1", legacyToken); got.Code != http.StatusOK {
+		t.Fatalf("a link shared before the upgrade must keep working, got %d %s", got.Code, got.Body.String())
+	}
+}
