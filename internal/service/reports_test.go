@@ -307,3 +307,67 @@ func TestDiffHunkBudgetDropsLaterExcerpts(t *testing.T) {
 		}
 	}
 }
+
+// A failed or skipped capture never reaches normalizeReportIssues, and a nil
+// slice persists as JSON null, which breaks any client that iterates the list.
+func TestFailedReportStillHasAnIssueList(t *testing.T) {
+	svc := newTestService(t)
+	project := model.Project{Name: "app", ProjectKey: "null-issues", AppDir: t.TempDir(), GitProvider: model.GitProviderGitHub, Branch: "main"}
+	if err := svc.DB.Create(&project).Error; err != nil {
+		t.Fatal(err)
+	}
+	for i, command := range []string{"printf not-json", "exit 7", ""} {
+		task := model.DeployTask{ProjectID: project.ID, TriggerType: model.TriggerManual, Status: model.TaskSuccess, LogFile: svc.Config.Deploy.LogDir + "/n.log"}
+		if err := svc.DB.Create(&task).Error; err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.runReportCommandStage(context.Background(), project, &task, "review", command, model.ReportTypeAIReview); err != nil {
+			t.Fatal(err)
+		}
+		var stored model.Report
+		if err := svc.DB.Where("task_id = ?", task.ID).First(&stored).Error; err != nil {
+			t.Fatal(err)
+		}
+		if stored.Issues == nil {
+			t.Fatalf("case %d (%q): a stored report must carry a list, not null", i, command)
+		}
+	}
+}
+
+// An invalid-JSON failure must say what the script printed, not only how the
+// parser objected: the output is the part that says where to look.
+func TestInvalidJSONErrorShowsWhatTheScriptPrinted(t *testing.T) {
+	svc := newTestService(t)
+	project := model.Project{Name: "app", ProjectKey: "preview", AppDir: t.TempDir(), GitProvider: model.GitProviderGitHub, Branch: "main"}
+	if err := svc.DB.Create(&project).Error; err != nil {
+		t.Fatal(err)
+	}
+	task := model.DeployTask{ProjectID: project.ID, TriggerType: model.TriggerManual, Status: model.TaskSuccess, LogFile: svc.Config.Deploy.LogDir + "/p.log"}
+	if err := svc.DB.Create(&task).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.runReportCommandStage(context.Background(), project, &task, "review",
+		`printf '%s' '{"report_type":"ai_review"} and a trailing sentence'`, model.ReportTypeAIReview); err != nil {
+		t.Fatal(err)
+	}
+	var stored model.Report
+	if err := svc.DB.Where("task_id = ?", task.ID).First(&stored).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stored.ErrorMessage, "trailing sentence") {
+		t.Fatalf("the error must quote the output it could not parse: %q", stored.ErrorMessage)
+	}
+}
+
+func TestCapturePreviewIsBoundedAndReadable(t *testing.T) {
+	if got := capturePreview([]byte("   \n  ")); got != "(no output)" {
+		t.Fatalf("blank output should say so, got %s", got)
+	}
+	long := capturePreview([]byte(strings.Repeat("x", 500)))
+	if len([]rune(long)) > 210 {
+		t.Fatalf("preview must stay short, got %d runes", len([]rune(long)))
+	}
+	if !strings.HasSuffix(long, "…\"") {
+		t.Fatalf("a cut preview must show it was cut: %s", long)
+	}
+}

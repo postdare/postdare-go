@@ -96,6 +96,13 @@ Every command stage -- not only report stages -- receives `POSTDARE_TASK_ID`,
 manual and MCP deploys use `HEAD^..HEAD`. Report-stage failures never change the
 deployment result.
 
+A capture script must print the report object on stdout. The example script tolerates
+a model that wraps it in a code fence or adds a sentence after it, extracting the
+outermost JSON object; without python3 on the server it can only pass the model's
+output through, so install python3 where the example script runs. When the output
+still does not parse, the failure is recorded on the report with the first 200
+characters of what was actually printed, which is usually enough to see why.
+
 Each issue may carry a `diff_hunk`: the excerpt of the reviewed diff the finding
 refers to, which makes a finding checkable instead of an assertion to take on trust.
 A capture script must cut it from the real diff by the reported location rather than

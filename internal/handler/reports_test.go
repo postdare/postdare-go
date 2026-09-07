@@ -161,3 +161,20 @@ func TestPublicReportServesDiffHunks(t *testing.T) {
 		t.Fatalf("the shared report must carry the excerpt: %s", public.Body.String())
 	}
 }
+
+// Reports written before the capture path seeded the list hold JSON null. The
+// response must still hand clients an array, or the report page cannot render.
+func TestReportResponseCoercesNullIssues(t *testing.T) {
+	database, router, report := setupReportHandlerTest(t)
+	if err := database.Exec("UPDATE reports SET issues = NULL WHERE id = ?", report.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	shared := performReportRequest(router, http.MethodPost, "/reports/1/share", "")
+	public := performReportRequest(router, http.MethodGet, "/public/reports/1", responseString(t, shared, "token"))
+	if public.Code != http.StatusOK {
+		t.Fatalf("public report: %d %s", public.Code, public.Body.String())
+	}
+	if !strings.Contains(public.Body.String(), `"issues":[]`) {
+		t.Fatalf("a null issue list must be served as an empty array: %s", public.Body.String())
+	}
+}

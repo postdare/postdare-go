@@ -69,7 +69,39 @@ def find_hunk(files, location):
     return ''
 
 
-report = json.load(sys.stdin)
+def extract_json(text):
+    """Pull the report object out of output that may carry prose or code fences.
+
+    Instructing a model to emit only JSON does not reliably stop it from adding a
+    sentence or a fence, and a report is too expensive to discard over that.
+    """
+    for start in (i for i, ch in enumerate(text) if ch == '{'):
+        depth, in_string, escaped = 0, False, False
+        for index in range(start, len(text)):
+            ch = text[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == '\\':
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start:index + 1])
+                    except ValueError:
+                        break
+    raise ValueError('no JSON object in model output')
+
+
+report = extract_json(sys.stdin.read())
 files = parse_diff(sys.argv[1])
 for issue in report.get('issues') or []:
     if isinstance(issue, dict):

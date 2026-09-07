@@ -161,12 +161,18 @@ func (h *Handler) reportResponse(report model.Report) (reportResponse, error) {
 	if err := h.DB.Select("id", "name").First(&project, report.ProjectID).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return reportResponse{}, err
 	}
+	// Rows written before the capture path seeded the list hold JSON null. Serve
+	// them as an empty array so a report that failed or was skipped still renders.
+	issues := report.Issues
+	if issues == nil {
+		issues = []model.ReportIssue{}
+	}
 	return reportResponse{
 		ID: report.ID, Type: report.Type, ProjectID: report.ProjectID, ProjectName: project.Name,
 		TaskID: report.TaskID, TriggerType: task.TriggerType, Branch: task.Branch,
 		CommitID: report.CommitID, BeforeCommitID: report.BeforeCommitID, DeployStatus: task.Status,
 		Status: report.Status, Conclusion: report.Conclusion, Summary: report.Summary,
-		Issues: report.Issues, Markdown: report.Markdown, ErrorMessage: report.ErrorMessage,
+		Issues: issues, Markdown: report.Markdown, ErrorMessage: report.ErrorMessage,
 		ShareEnabled: report.ShareEnabled, CreatedAt: report.CreatedAt, UpdatedAt: report.UpdatedAt,
 	}, nil
 }

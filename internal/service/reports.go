@@ -64,6 +64,10 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 		CommitID:       target,
 		BeforeCommitID: base,
 		Status:         model.ReportFailed,
+		// A failed or skipped capture never reaches normalizeReportIssues, so seed
+		// the list here: a nil slice persists as JSON null and clients that expect
+		// an array break on it.
+		Issues: []model.ReportIssue{},
 	}
 	// fail records why the capture produced no report, on the Report row and in
 	// the deploy log, then closes the stage.
@@ -98,7 +102,7 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 	}
 	var captured capturedReport
 	if err := json.Unmarshal(raw, &captured); err != nil {
-		return fail(fmt.Errorf("report command returned invalid JSON: %w", err))
+		return fail(fmt.Errorf("report command returned invalid JSON: %w; output began %s", err, capturePreview(raw)))
 	}
 	if err := validateCapturedReport(captured, reportType); err != nil {
 		return fail(err)
@@ -127,6 +131,22 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 	}
 	runner.AppendLog(task.LogFile, s.Hub, task.ID, name, "report captured")
 	return stageOK, nil
+}
+
+// capturePreview quotes the head of a capture's stdout for an error message.
+// Without it an operator sees only how the parser objected and not what the
+// script actually printed, which is the part that says where to look.
+func capturePreview(raw []byte) string {
+	const maxPreviewRunes = 200
+	text := strings.TrimSpace(string(raw))
+	if text == "" {
+		return "(no output)"
+	}
+	runes := []rune(text)
+	if len(runes) > maxPreviewRunes {
+		return strconv.Quote(string(runes[:maxPreviewRunes]) + "…")
+	}
+	return strconv.Quote(text)
 }
 
 func validateCapturedReport(report capturedReport, reportType string) error {
