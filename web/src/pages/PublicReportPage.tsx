@@ -149,13 +149,17 @@ function IssueRow({ issue }: { issue: ReportIssue }) {
       <Badge tone={issue.severity === "high" ? "failed" : issue.severity === "medium" ? "pending" : "running"}>{issue.severity}</Badge>
       <div className="min-w-0">
         <h3 className="text-sm font-semibold">{issue.title}</h3>
-        {issue.location ? <code className="mt-1 block break-all text-xs text-info">{issue.location}</code> : null}
+        {/* With an excerpt the path sits on its header and the line in its gutter,
+            so repeating "file:line" here would say it a third time. */}
+        {issue.location && !issue.diff_hunk ? (
+          <code className="mt-1 block break-all text-xs text-info">{issue.location}</code>
+        ) : null}
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
           {issue.trigger ? <IssueDetail label="Trigger" value={issue.trigger} /> : null}
           {issue.impact ? <IssueDetail label="Impact" value={issue.impact} /> : null}
           {issue.suggestion ? <IssueDetail label="Suggestion" value={issue.suggestion} /> : null}
         </dl>
-        {issue.diff_hunk ? <DiffHunk hunk={issue.diff_hunk} /> : null}
+        {issue.diff_hunk ? <DiffHunk hunk={issue.diff_hunk} location={issue.location} /> : null}
       </div>
     </article>
   );
@@ -193,36 +197,44 @@ function parseHunk(hunk: string): DiffRow[] {
   });
 }
 
-const diffMarkers: Record<DiffRow["kind"], string> = { add: "+", del: "-", context: " ", meta: " " };
+const diffMarkers: Record<DiffRow["kind"], string> = { add: "+", del: "-", context: " ", meta: "" };
 
-function DiffHunk({ hunk }: { hunk: string }) {
+// "path/to/file.go:12" names the file the excerpt came from; the line is already
+// on the rows, so the header carries only the path.
+function excerptPath(location?: string) {
+  return (location ?? "").replace(/:\d+.*$/, "").trim();
+}
+
+function DiffHunk({ hunk, location }: { hunk: string; location?: string }) {
   const rows = parseHunk(hunk);
+  const path = excerptPath(location);
   // An excerpt the server omitted has no diff content to lay out; show the note.
   if (!rows.some((row) => row.kind !== "meta")) {
     return <p className="issue-diff-note">{hunk}</p>;
   }
   return (
     <div className="issue-diff">
-      <table>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={index} className={`diff-${row.kind}`}>
-              {row.kind === "meta" ? (
-                <td className="diff-code" colSpan={3}>{row.text}</td>
-              ) : (
-                <>
-                  <td className="diff-num">{row.oldNumber ?? ""}</td>
-                  <td className="diff-num">{row.newNumber ?? ""}</td>
-                  <td className="diff-code">
-                    <span className="diff-marker">{diffMarkers[row.kind]}</span>
-                    {row.text}
-                  </td>
-                </>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {path ? <div className="issue-diff-head">{path}</div> : null}
+      <div className="issue-diff-body">
+        <table>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={index} className={`diff-${row.kind}`}>
+                {row.kind === "meta" ? (
+                  <td className="diff-code" colSpan={4}>{row.text}</td>
+                ) : (
+                  <>
+                    <td className="diff-num">{row.oldNumber ?? ""}</td>
+                    <td className="diff-num">{row.newNumber ?? ""}</td>
+                    <td className="diff-marker">{diffMarkers[row.kind]}</td>
+                    <td className="diff-code">{row.text}</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
