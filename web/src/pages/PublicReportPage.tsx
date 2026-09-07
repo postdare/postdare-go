@@ -161,24 +161,70 @@ function IssueRow({ issue }: { issue: ReportIssue }) {
   );
 }
 
-function DiffHunk({ hunk }: { hunk: string }) {
-  return (
-    <details className="issue-hunk">
-      <summary>Diff excerpt</summary>
-      <pre>
-        {hunk.split("\n").map((line, index) => (
-          <span key={index} className={diffLineClass(line)}>{line}{"\n"}</span>
-        ))}
-      </pre>
-    </details>
-  );
+type DiffRow = {
+  kind: "meta" | "add" | "del" | "context";
+  oldNumber?: number;
+  newNumber?: number;
+  text: string;
+};
+
+// Walk a unified-diff hunk, numbering each side from the @@ header so the excerpt
+// can be read against the file the way a diff view shows it. Lines that are not
+// diff content -- the header, and the notes the server appends when an excerpt is
+// cut or omitted -- carry no number.
+function parseHunk(hunk: string): DiffRow[] {
+  let oldNumber = 0;
+  let newNumber = 0;
+  return hunk.split("\n").map<DiffRow>((line) => {
+    const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (header) {
+      oldNumber = Number(header[1]);
+      newNumber = Number(header[2]);
+      return { kind: "meta", text: line };
+    }
+    if (line.startsWith("+")) return { kind: "add", newNumber: newNumber++, text: line.slice(1) };
+    if (line.startsWith("-")) return { kind: "del", oldNumber: oldNumber++, text: line.slice(1) };
+    // A blank context line loses its leading space to any tool that strips trailing
+    // whitespace; treating it as meta would desynchronise every number below it.
+    if (line.startsWith(" ") || line === "") {
+      return { kind: "context", oldNumber: oldNumber++, newNumber: newNumber++, text: line.slice(1) };
+    }
+    return { kind: "meta", text: line };
+  });
 }
 
-function diffLineClass(line: string) {
-  if (line.startsWith("@@")) return "hunk-meta";
-  if (line.startsWith("+")) return "hunk-add";
-  if (line.startsWith("-")) return "hunk-del";
-  return undefined;
+const diffMarkers: Record<DiffRow["kind"], string> = { add: "+", del: "-", context: " ", meta: " " };
+
+function DiffHunk({ hunk }: { hunk: string }) {
+  const rows = parseHunk(hunk);
+  // An excerpt the server omitted has no diff content to lay out; show the note.
+  if (!rows.some((row) => row.kind !== "meta")) {
+    return <p className="issue-diff-note">{hunk}</p>;
+  }
+  return (
+    <div className="issue-diff">
+      <table>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={index} className={`diff-${row.kind}`}>
+              {row.kind === "meta" ? (
+                <td className="diff-code" colSpan={3}>{row.text}</td>
+              ) : (
+                <>
+                  <td className="diff-num">{row.oldNumber ?? ""}</td>
+                  <td className="diff-num">{row.newNumber ?? ""}</td>
+                  <td className="diff-code">
+                    <span className="diff-marker">{diffMarkers[row.kind]}</span>
+                    {row.text}
+                  </td>
+                </>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function IssueDetail({ label, value }: { label: string; value: string }) {

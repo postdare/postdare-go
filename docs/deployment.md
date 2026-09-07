@@ -155,7 +155,15 @@ report that could not run rather than an obvious error.
 
 Every refusal to run -- no reviewer, no python3, a missing skill directory, an
 unparseable commit range -- is reported as a failed report rather than a non-zero
-exit, so the reason is readable in the UI instead of buried in the deploy log.
+exit, so the reason is readable in the UI. The same reason goes to stderr, which the
+runner keeps in the deploy log and a terminal shows directly, so running the script
+by hand does not mean reading JSON to find out what went wrong.
+
+To try it by hand, supply the variables Postdare would inject:
+
+```bash
+POSTDARE_PROJECT_DIR=/opt/postdare-go/app /opt/postdare-go/bin/ai-review
+```
 
 Configure the command as `/opt/postdare-go/bin/ai-review`, set
 `capture_as: ai_review`, `run_when: always`, and keep the Feishu outbound stage after it

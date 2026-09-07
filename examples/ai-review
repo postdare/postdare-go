@@ -4,7 +4,12 @@ set -euo pipefail
 # Every stage outcome, including a refusal to run, must reach Postdare as a report
 # object on stdout: a non-zero exit or stray text is recorded as a capture failure
 # with nothing to read. emit takes a status, conclusion, summary and error.
+#
+# The same reason also goes to stderr, which the runner streams into the deploy log
+# and a terminal shows directly, so neither an operator reading the log nor a person
+# running this by hand has to read JSON to see what went wrong.
 emit() {
+  printf 'ai-review: %s (%s)\n' "${4:-$3}" "$2" >&2
   python3 - "$@" <<'PYEOF' 2>/dev/null || printf '{"report_type":"ai_review","status":"failed","conclusion":"%s","issues":[],"summary":"","markdown":"","error_message":"%s"}\n' "$2" "$4"
 import json, sys
 json.dump({
