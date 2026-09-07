@@ -18,6 +18,25 @@ commit: {{ .Task.CommitID }}
 任务ID: {{ .Task.ID }}
 耗时: {{ .Duration }}`;
 
+const reportCaptureContract = `{
+  "report_type": "ai_review",
+  "status": "success | failed | skipped",
+  "conclusion": "必填，一行结论",
+  "summary": "摘要，建议 240 字以内",
+  "issues": [
+    {
+      "severity": "high | medium | low",
+      "title": "必填",
+      "location": "文件:行号",
+      "trigger": "触发条件",
+      "impact": "影响",
+      "suggestion": "建议"
+    }
+  ],
+  "markdown": "完整 Markdown 报告",
+  "error_message": ""
+}`;
+
 type Props = {
   value: Partial<Project>;
   onChange: (value: Partial<Project>) => void;
@@ -153,11 +172,45 @@ function StageEditor({ stages, onChange }: { stages: ProjectStage[]; onChange: (
                     </select>
                   </div>
                   {stage.type === "command" ? (
-                    <Textarea
-                      placeholder="Shell command"
-                      value={stage.config.command}
-                      onChange={(e) => updateConfig(index, { command: e.target.value })}
-                    />
+                    <div className="grid gap-2">
+                      <Textarea
+                        placeholder="Shell command"
+                        value={stage.config.command}
+                        onChange={(e) => updateConfig(index, { command: e.target.value })}
+                      />
+                      <div className="flex items-start gap-1.5 text-xs text-ink">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(stage.config.capture_as)}
+                          onChange={(e) => updateConfig(index, { capture_as: e.target.checked ? "ai_review" : "" })}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                          id={`capture-${index}`}
+                        />
+                        <label htmlFor={`capture-${index}`} className="grid gap-0.5">
+                          <span>Capture stdout as report</span>
+                          <span className="text-muted">
+                            该阶段的 stdout 不再写入部署日志，命令必须打印下方结构的 JSON。
+                          </span>
+                        </label>
+                        <button
+                          type="button"
+                          title="报告 JSON 结构"
+                          aria-label="报告 JSON 结构"
+                          aria-pressed={Boolean(openHints[index])}
+                          onClick={() => toggleHint(index)}
+                          className={`ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border hover:bg-muted/10 ${
+                            openHints[index] ? "border-primary text-primary" : "border-border text-muted"
+                          }`}
+                        >
+                          <HelpCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      {openHints[index] ? (
+                        <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-surface p-3 text-xs leading-relaxed text-muted">
+                          {reportCaptureContract}
+                        </pre>
+                      ) : null}
+                    </div>
                   ) : null}
                   {stage.type === "health_check" ? (
                     <Input
@@ -212,17 +265,6 @@ function StageEditor({ stages, onChange }: { stages: ProjectStage[]; onChange: (
                     </div>
                   ) : null}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink">
-                    {stage.type === "command" ? (
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(stage.config.capture_as)}
-                          onChange={(e) => updateConfig(index, { capture_as: e.target.checked ? "ai_review" : "" })}
-                          className="h-4 w-4 accent-primary"
-                        />
-                        Capture stdout as AI review report
-                      </label>
-                    ) : null}
                     <label className="flex items-center gap-1.5">
                       <input
                         type="checkbox"

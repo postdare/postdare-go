@@ -140,3 +140,24 @@ func TestPublicReportAcceptsPreUpgradeToken(t *testing.T) {
 		t.Fatalf("a link shared before the upgrade must keep working, got %d %s", got.Code, got.Body.String())
 	}
 }
+
+// A shared report carries its diff excerpts: a reader without repo access is
+// exactly who needs the code beside the finding.
+func TestPublicReportServesDiffHunks(t *testing.T) {
+	database, router, report := setupReportHandlerTest(t)
+	if err := database.Model(&model.Report{}).Where("id = ?", report.ID).Updates(map[string]interface{}{
+		"issues": `[{"severity":"high","title":"race","location":"main.go:9","diff_hunk":"@@ -1 +1 @@\n-old\n+new"}]`,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	shared := performReportRequest(router, http.MethodPost, "/reports/1/share", "")
+	token := responseString(t, shared, "token")
+
+	public := performReportRequest(router, http.MethodGet, "/public/reports/1", token)
+	if public.Code != http.StatusOK {
+		t.Fatalf("public report: %d %s", public.Code, public.Body.String())
+	}
+	if !strings.Contains(public.Body.String(), "diff_hunk") || !strings.Contains(public.Body.String(), "+new") {
+		t.Fatalf("the shared report must carry the excerpt: %s", public.Body.String())
+	}
+}

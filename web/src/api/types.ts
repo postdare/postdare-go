@@ -120,6 +120,10 @@ export interface ReportIssue {
   trigger?: string;
   impact?: string;
   suggestion?: string;
+  // Excerpt of the reviewed diff, cut from the real diff by the capture script,
+  // so a finding can be checked without opening the repo. Served on the shared
+  // report too, which is what makes it checkable for a reader without access.
+  diff_hunk?: string;
 }
 
 export interface Report {

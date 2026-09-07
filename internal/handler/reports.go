@@ -130,6 +130,10 @@ func (h *Handler) GetPublicReport(c *gin.Context) {
 		util.Error(c, http.StatusInternalServerError, "REPORT_LOAD_FAILED", "Failed to load report", nil)
 		return
 	}
+	// Diff excerpts are served here too: a shared report exists so a reader without
+	// repo access can check a finding, and the excerpt is what makes that possible.
+	// The trade is deliberate -- whoever holds the share link reads the reviewed
+	// source with it -- so revoke a link that has spread rather than one that has not.
 	c.Header("Cache-Control", "no-store")
 	c.Header("Referrer-Policy", "no-referrer")
 	util.OK(c, response)
