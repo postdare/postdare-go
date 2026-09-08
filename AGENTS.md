@@ -41,6 +41,7 @@ Deploys run the project's configured `deploy_stages` — typed `[]model.ProjectS
 - SSE `/stream` endpoints accept `?access_token=<jwt or mcp token>` as a fallback because `EventSource` can't set headers.
 - `webhook_secret` and `notify_webhook` are masked in API responses; a value containing `******` is treated as masked and ignored on PATCH (`isMaskedValue`).
 - MCP mutation tools (`trigger_deploy`, `trigger_rollback`) are off unless `mcp.allow_mutation_tools=true` AND the tool call passes `confirm=true`.
+- The MCP server has two transports sharing one implementation (`internal/mcp`, dispatch entry `Server.HandleLine`): the `mcp` subcommand over stdio, and `POST /mcp` (Streamable HTTP, registered only when `mcp.enabled`) whose tool calls re-enter the same gin engine in process via `mcp.NewLocalServer`. `/mcp` takes the MCP token only, answers JSON (never SSE), keeps no session, and rejects an `Origin` outside `server.cors_origins`/`server.public_url`.
 - Webhook verification differs by provider: GitHub requires `X-Hub-Signature-256` HMAC-SHA256; Gitee accepts `X-Gitee-Token` / `X-Git-Osc-Token` header or `?token=` query.
 
 ## Frontend
