@@ -19,6 +19,19 @@ const reportTypeLabels: Record<string, string> = {
 
 const reportTypeLabel = (type: string) => reportTypeLabels[type] ?? "Report";
 
+// A review script picks its own conclusion, and ours emit machine values like
+// "issues_found". Give the ones we ship a written label and unslug the rest so a
+// custom script's value still reads as a sentence rather than a field name.
+const conclusionLabels: Record<string, string> = {
+  passed: "No issues found",
+  issues_found: "Issues found",
+};
+
+function conclusionLabel(conclusion: string) {
+  if (!conclusion) return "Review result";
+  return conclusionLabels[conclusion] ?? conclusion.replace(/_/g, " ").replace(/^./, (first) => first.toUpperCase());
+}
+
 function consumeReportToken(reportId: string) {
   const storageKey = `postdare.report.${reportId}`;
   const fragment = new URLSearchParams(window.location.hash.slice(1));
@@ -43,6 +56,9 @@ export function PublicReportPage() {
   const data = report.data?.data;
   const issues = data?.issues ?? [];
   const counts = countIssues(issues);
+  // A run can succeed and still report findings, so a green tick is only right
+  // when the review came back with nothing to fix.
+  const verdict = data?.status !== "success" ? "failed" : counts.high + counts.medium + counts.low > 0 ? "attention" : "clear";
 
   if (!token) {
     return <ReportMessage title="Report link is incomplete" body="Open the complete share link from your deployment notification." />;
@@ -77,21 +93,26 @@ export function PublicReportPage() {
 
       <div className="report-content">
         <section className="report-overview" aria-labelledby="report-summary">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              {data.status === "success" ? <CheckCircle2 className="h-5 w-5 text-success" /> : <AlertTriangle className="h-5 w-5 text-warning" />}
-              <h2 id="report-summary" className="text-base font-semibold">{data.conclusion || "Review result"}</h2>
-            </div>
-            <p className="mt-2 max-w-[72ch] text-sm leading-6 text-muted">{data.summary || data.error_message || "No summary was provided."}</p>
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-              <span>Deploy: {data.deploy_status}</span><span>Branch: {data.branch || "unknown"}</span><span>Task #{data.task_id}</span>
+          {/* The verdict and the counts are both short, so they share the top line;
+              the summary then runs under them at a readable measure instead of
+              leaving a hole beside the counts. */}
+          <div className="report-verdict">
+            <h2 id="report-summary">
+              {verdict === "clear" ? <CheckCircle2 className="h-5 w-5 flex-none text-success" /> : <AlertTriangle className={`h-5 w-5 flex-none ${verdict === "failed" ? "text-danger" : "text-warning"}`} />}
+              {conclusionLabel(data.conclusion)}
+            </h2>
+            <div className="risk-counts" aria-label="Issue counts">
+              <RiskCount label="High" count={counts.high} tone="danger" />
+              <RiskCount label="Medium" count={counts.medium} tone="warning" />
+              <RiskCount label="Low" count={counts.low} tone="info" />
             </div>
           </div>
-          <div className="risk-counts" aria-label="Issue counts">
-            <RiskCount label="High" count={counts.high} tone="danger" />
-            <RiskCount label="Medium" count={counts.medium} tone="warning" />
-            <RiskCount label="Low" count={counts.low} tone="info" />
-          </div>
+          <p className="report-summary-text">{data.summary || data.error_message || "No summary was provided."}</p>
+          <dl className="report-meta">
+            <div><dt>Deploy</dt><dd>{data.deploy_status}</dd></div>
+            <div><dt>Branch</dt><dd>{data.branch || "unknown"}</dd></div>
+            <div><dt>Task</dt><dd>#{data.task_id}</dd></div>
+          </dl>
         </section>
 
         {issues.length > 0 ? (
@@ -231,17 +252,19 @@ function MermaidViewer({ svg, onClose }: { svg: string; onClose: () => void }) {
 function IssueRow({ issue }: { issue: ReportIssue }) {
   return (
     <article className="issue-row">
-      <Badge tone={issue.severity === "high" ? "failed" : issue.severity === "medium" ? "pending" : "running"}>{issue.severity}</Badge>
-      <div className="min-w-0">
-        <h3 className="text-sm font-semibold">{issue.title}</h3>
-        {/* With an excerpt the path sits on its header and the line in its gutter,
-            so repeating "file:line" here would say it a third time. */}
-        {issue.location && !issue.diff_hunk ? (
-          <code className="mt-1 block break-all text-xs text-info">{issue.location}</code>
-        ) : null}
-        <IssueFacts issue={issue} />
-        {issue.diff_hunk ? <DiffHunk hunk={issue.diff_hunk} location={issue.location} /> : null}
+      {/* The severity sits on the title line: in its own column it left a tall
+          empty gutter beside everything below the badge. */}
+      <div className="issue-head">
+        <Badge tone={issue.severity === "high" ? "failed" : issue.severity === "medium" ? "pending" : "running"}>{issue.severity}</Badge>
+        <h3>{issue.title}</h3>
       </div>
+      {/* With an excerpt the path sits on its header and the line in its gutter,
+          so repeating "file:line" here would say it a third time. */}
+      {issue.location && !issue.diff_hunk ? (
+        <code className="mt-1 block break-all text-xs text-info">{issue.location}</code>
+      ) : null}
+      <IssueFacts issue={issue} />
+      {issue.diff_hunk ? <DiffHunk hunk={issue.diff_hunk} location={issue.location} /> : null}
     </article>
   );
 }
@@ -383,7 +406,11 @@ function IssueFacts({ issue }: { issue: ReportIssue }) {
 
 function RiskCount({ label, count, tone }: { label: string; count: number; tone: string }) {
   const colors: Record<string, string> = { danger: "bg-danger", warning: "bg-warning", info: "bg-info" };
-  return <div className="risk-count"><span className={`risk-dot ${colors[tone]}`} /><strong>{count}</strong><span>{label}</span></div>;
+  return (
+    <div className={`risk-count${count === 0 ? " risk-count-empty" : ""}`}>
+      <span className={`risk-dot ${colors[tone]}`} /><strong>{count}</strong><span>{label}</span>
+    </div>
+  );
 }
 
 function countIssues(issues: ReportIssue[]) {
