@@ -109,8 +109,12 @@ func (s *Service) runReportCommandStage(ctx context.Context, project model.Proje
 	if err := json.Unmarshal(raw, &captured); err != nil {
 		return fail(fmt.Errorf("report command returned invalid JSON: %w; output began %s", err, capturePreview(raw)))
 	}
+	// The preview matters as much here as on a parse failure: "report_type must be
+	// \"ai_review\"" names the rule the output broke and nothing about the output,
+	// which leaves an operator with no way to tell a script that sent the wrong
+	// type from one that sent a fragment of a report.
 	if err := validateCapturedReport(captured, reportType); err != nil {
-		return fail(err)
+		return fail(fmt.Errorf("%w; output began %s", err, capturePreview(raw)))
 	}
 
 	report.Status = normalizeReportStatus(captured.Status)

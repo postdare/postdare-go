@@ -216,36 +216,57 @@ def find_hunk(files, location):
     return ''
 
 
+def object_end(text, start):
+    """Index just past the brace closing the object that opens at start, or -1."""
+    depth, in_string, escaped = 0, False, False
+    for index in range(start, len(text)):
+        ch = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == '\\':
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return -1
+
+
 def extract_json(text):
     """Pull the report object out of output that may carry prose or code fences.
 
     Instructing a model to emit only JSON does not reliably stop it from adding a
     sentence or a fence, and a report is too expensive to discard over that.
+
+    Only an object standing at the top level of the output can be the report. A
+    candidate that does not parse is skipped whole and never descended into: the
+    objects nested inside a malformed report are its issues, and returning one of
+    those would hand the server a fragment that looks like a report and is not.
+    An unescaped quote in a model-written summary is enough to reach that state,
+    so this is the ordinary case rather than a far-fetched one.
     """
-    for start in (i for i, ch in enumerate(text) if ch == '{'):
-        depth, in_string, escaped = 0, False, False
-        for index in range(start, len(text)):
-            ch = text[index]
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif ch == '\\':
-                    escaped = True
-                elif ch == '"':
-                    in_string = False
-                continue
-            if ch == '"':
-                in_string = True
-            elif ch == '{':
-                depth += 1
-            elif ch == '}':
-                depth -= 1
-                if depth == 0:
-                    try:
-                        return json.loads(text[start:index + 1])
-                    except ValueError:
-                        break
-    raise ValueError('no JSON object in model output')
+    index = 0
+    while True:
+        start = text.find('{', index)
+        if start < 0:
+            raise ValueError('no JSON object in model output')
+        end = object_end(text, start)
+        if end < 0:
+            # Unbalanced: the output stops inside this object, so everything
+            # still unread is nested in it and none of it is the report.
+            raise ValueError('no JSON object in model output')
+        try:
+            return json.loads(text[start:end])
+        except ValueError:
+            index = end
 
 
 def fail(reason):
@@ -273,6 +294,11 @@ try:
 except ValueError as error:
     fail('%s; output began %r' % (error, raw.strip()[:200]))
     sys.exit(0)
+
+# report_type is the contract between this script and the server, and the stage
+# already knows which report it is running. Leaving it to the model turns any
+# omission or typo there into a rejected report.
+report['report_type'] = 'ai_review'
 
 files = parse_diff(sys.argv[1])
 for issue in report.get('issues') or []:
