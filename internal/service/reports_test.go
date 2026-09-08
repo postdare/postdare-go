@@ -143,6 +143,11 @@ func TestCaptureAsSelectsReportType(t *testing.T) {
 	if report.Status != model.ReportFailed || !strings.Contains(report.ErrorMessage, "report_type") {
 		t.Fatalf("a mismatched report_type must be rejected: %+v", report)
 	}
+	// Naming the rule without the output leaves nothing to look at: a script that
+	// sent the wrong type and one that sent a fragment of a report read alike.
+	if !strings.Contains(report.ErrorMessage, "perf_scan") {
+		t.Fatalf("the error must quote the output it rejected: %q", report.ErrorMessage)
+	}
 }
 
 // A notification link must survive being asked for again: a task with two
