@@ -102,7 +102,9 @@ select {
 .report-overview { padding-bottom: 28px; border-bottom: 1px solid oklch(var(--border)); }
 .report-verdict { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
 .report-verdict h2 { display: flex; min-width: 0; align-items: center; gap: 9px; margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
-.report-summary-text { max-width: 72ch; margin: 10px 0 0; color: oklch(var(--muted)); font-size: 14px; line-height: 1.7; }
+/* The report column already caps the measure, and a summary held to 72ch left
+   half the row empty on a wide screen. */
+.report-summary-text { margin: 10px 0 0; color: oklch(var(--muted)); font-size: 14px; line-height: 1.7; }
 .report-meta { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 16px 0 0; }
 .report-meta > div { display: flex; align-items: baseline; gap: 6px; border: 1px solid oklch(var(--border)); border-radius: 8px; padding: 4px 10px; font-size: 12px; }
 .report-meta dt { color: oklch(var(--muted)); }
