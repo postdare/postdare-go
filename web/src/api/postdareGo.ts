@@ -67,10 +67,6 @@ export function listDeployTaskReports(id: string | number, token?: string | null
   return apiRequest<DataResponse<Report[]>>(`/api/v1/deploy-tasks/${id}/reports`, {}, token);
 }
 
-export function listReports(token?: string | null, params: Record<string, string | number | undefined> = {}) {
-  return apiRequest<ListResponse<Report>>(withQuery("/api/v1/reports", params), {}, token);
-}
-
 export function getPublicReport(id: string | number, reportToken: string) {
   return apiRequest<DataResponse<Report>>(`/api/v1/public/reports/${id}`, { headers: { "X-Report-Token": reportToken } });
 }

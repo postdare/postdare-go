@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, Boxes, FileText, GitBranch, LayoutDashboard, LogOut, Moon, Settings, Sun, Webhook } from "lucide-react";
+import { Activity, Boxes, GitBranch, LayoutDashboard, LogOut, Moon, Settings, Sun, Webhook } from "lucide-react";
 
 import { Button } from "../components/ui/button";
 import { cn } from "../lib/utils";
@@ -9,7 +9,6 @@ const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/projects", label: "Projects", icon: Boxes },
   { to: "/deploy-tasks", label: "Deployments", icon: Activity },
-  { to: "/reports", label: "Reports", icon: FileText },
   { to: "/webhook-events", label: "Webhooks", icon: Webhook },
   { to: "/settings", label: "Settings", icon: Settings }
 ];
@@ -75,7 +74,7 @@ export function AppShell() {
         <main className="mx-auto w-full max-w-7xl overflow-x-clip px-4 pt-5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:px-6 md:pb-5">
           <Outlet />
         </main>
-        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
           {navItems.map((item) => (
             <NavLink
               key={item.to}

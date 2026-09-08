@@ -59,65 +59,6 @@ func TestReportShareRotateAndRevoke(t *testing.T) {
 	}
 }
 
-func TestListReports(t *testing.T) {
-	database, router, _ := setupReportHandlerTest(t)
-	other := model.Project{Name: "api", ProjectKey: "api", GitProvider: model.GitProviderGitee, Branch: "main", AppDir: "/srv/api"}
-	if err := database.Create(&other).Error; err != nil {
-		t.Fatal(err)
-	}
-	task := model.DeployTask{ProjectID: other.ID, TriggerType: model.TriggerManual, Branch: "main", Status: model.TaskFailed}
-	if err := database.Create(&task).Error; err != nil {
-		t.Fatal(err)
-	}
-	second := model.Report{Type: model.ReportTypeAIReview, ProjectID: other.ID, TaskID: task.ID, Status: model.ReportFailed, Conclusion: "regressed", Issues: []model.ReportIssue{}}
-	if err := database.Create(&second).Error; err != nil {
-		t.Fatal(err)
-	}
-
-	res := performReportRequest(router, http.MethodGet, "/reports", "")
-	if res.Code != http.StatusOK {
-		t.Fatalf("list: %d %s", res.Code, res.Body.String())
-	}
-	var body struct {
-		Data []struct {
-			ID          uint64 `json:"id"`
-			ProjectName string `json:"project_name"`
-			Status      string `json:"status"`
-		} `json:"data"`
-		Pagination struct {
-			Total int64 `json:"total"`
-		} `json:"pagination"`
-	}
-	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if body.Pagination.Total != 2 || len(body.Data) != 2 {
-		t.Fatalf("expected 2 reports, got total=%d len=%d", body.Pagination.Total, len(body.Data))
-	}
-	if body.Data[0].ID != second.ID {
-		t.Fatal("reports should be ordered newest first")
-	}
-	if body.Data[1].ProjectName != "app" {
-		t.Fatalf("project name missing: %q", body.Data[1].ProjectName)
-	}
-
-	filtered := performReportRequest(router, http.MethodGet, "/reports?status=failed", "")
-	if filtered.Code != http.StatusOK {
-		t.Fatalf("filtered list: %d", filtered.Code)
-	}
-	var filteredBody struct {
-		Data []struct {
-			Status string `json:"status"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(filtered.Body.Bytes(), &filteredBody); err != nil {
-		t.Fatal(err)
-	}
-	if len(filteredBody.Data) != 1 || filteredBody.Data[0].Status != model.ReportFailed {
-		t.Fatalf("status filter returned %d rows", len(filteredBody.Data))
-	}
-}
-
 func TestPublicReportRejectsMissingAndWrongTokens(t *testing.T) {
 	_, router, _ := setupReportHandlerTest(t)
 	if got := performReportRequest(router, http.MethodGet, "/public/reports/1", ""); got.Code != http.StatusUnauthorized {
@@ -154,7 +95,6 @@ func setupReportHandlerTest(t *testing.T) (*gorm.DB, *gin.Engine, model.Report) 
 	svc := service.New(database, cfg, sse.NewHub(), zap.NewNop())
 	h := &Handler{DB: database, Config: cfg, Service: svc}
 	router := gin.New()
-	router.GET("/reports", h.ListReports)
 	router.GET("/public/reports/:report_id", h.GetPublicReport)
 	router.POST("/reports/:report_id/share", h.ShareReport)
 	router.DELETE("/reports/:report_id/share", h.RevokeReportShare)
