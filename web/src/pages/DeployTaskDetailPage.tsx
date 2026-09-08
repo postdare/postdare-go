@@ -1,12 +1,13 @@
-import { AlertTriangle, Ban, RotateCcw } from "lucide-react";
+import { AlertTriangle, Ban, FileSearch, RotateCcw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiRequest, streamURL } from "../api/client";
-import { getDeployLog, getDeployTask } from "../api/postdareGo";
+import { getDeployLog, getDeployTask, listDeployTaskReports } from "../api/postdareGo";
 import type { DataResponse, DeployTask } from "../api/types";
 import { LogViewer } from "../components/LogViewer";
 import { PageHeader } from "../components/PageHeader";
+import { ReportBody, reportTypeLabel } from "../components/ReportView";
 import { Badge, statusTone } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -20,6 +21,9 @@ export function DeployTaskDetailPage() {
   const queryClient = useQueryClient();
   const task = useQuery({ queryKey: ["deploy-task", id], queryFn: () => getDeployTask(id!, token), enabled: Boolean(id), refetchInterval: 4000 });
   const log = useQuery({ queryKey: ["deploy-log", id], queryFn: () => getDeployLog(id!, token), enabled: Boolean(id) });
+  // Reports are captured by deploy stages, so they appear mid-run; polling while
+  // the task is live avoids a stale "no report" until the next manual refresh.
+  const reports = useQuery({ queryKey: ["deploy-task-reports", id], queryFn: () => listDeployTaskReports(id!, token), enabled: Boolean(id), refetchInterval: 4000 });
   const data = task.data?.data;
   const isLive = data?.status === "pending" || data?.status === "running";
   const liveLines = useEventStream(id && token && isLive ? streamURL(`/api/v1/deploy-tasks/${id}/logs/stream`, token) : undefined);
@@ -103,6 +107,20 @@ export function DeployTaskDetailPage() {
           </CardContent>
         </Card>
       </div>
+      {(reports.data?.data ?? []).map((report) => (
+        <Card key={report.id} className="mt-4">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <FileSearch className="h-4 w-4" />
+              {reportTypeLabel(report.type)}
+            </CardTitle>
+            <Badge tone={statusTone(report.status)}>{report.status}</Badge>
+          </CardHeader>
+          <CardContent>
+            <ReportBody report={report} />
+          </CardContent>
+        </Card>
+      ))}
     </>
   );
 }
