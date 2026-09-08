@@ -26,6 +26,10 @@ It only accepts that token when `mcp.enabled` is true.
 | `postdare_go.trigger_deploy` | Trigger deploy when mutation tools are enabled |
 | `postdare_go.trigger_rollback` | Trigger rollback when mutation tools are enabled |
 | `postdare_go.analyze_failed_deploy` | Rule-based failure analysis |
+| `postdare_go.list_deploy_task_reports` | List the reports a deploy task captured |
+| `postdare_go.get_report` | Get one report with summary, issues and markdown |
+
+Reports are the structured artifacts a deploy stage captures with `capture_as` (today `ai_review`). Both report tools are read-only and return the same payload as the REST endpoints, including each issue's `diff_hunk`, so an agent reads the reviewed code beside the finding. Sharing a report stays out of MCP: share links are created and revoked from the web UI only.
 
 Mutation tools are disabled by default:
 
@@ -57,6 +61,8 @@ The tool call must still pass:
 - `postdare-go://deploy-tasks/{task_id}`
 - `postdare-go://deploy-tasks/{task_id}/logs`
 - `postdare-go://projects/{project_id}/app-logs`
+- `postdare-go://deploy-tasks/{task_id}/reports`
+- `postdare-go://reports/{report_id}`
 
 ## Prompts
 

@@ -165,6 +165,10 @@ func (s *Server) callTool(name string, args map[string]interface{}) (interface{}
 		result, err = s.client.Post(fmt.Sprintf("/api/v1/projects/%d/rollback-tasks", uintArg(args, "project_id")), map[string]bool{"confirm": boolArg(args, "confirm")})
 	case "postdare_go.analyze_failed_deploy":
 		result, err = s.client.Get(fmt.Sprintf("/api/v1/deploy-tasks/%d/analysis", uintArg(args, "task_id")), nil)
+	case "postdare_go.list_deploy_task_reports":
+		result, err = s.client.Get(fmt.Sprintf("/api/v1/deploy-tasks/%d/reports", uintArg(args, "task_id")), nil)
+	case "postdare_go.get_report":
+		result, err = s.client.Get(fmt.Sprintf("/api/v1/reports/%d", uintArg(args, "report_id")), nil)
 	default:
 		return nil, fmt.Errorf("unknown tool %s", name)
 	}
@@ -191,6 +195,12 @@ func (s *Server) readResource(uri string) (interface{}, error) {
 	case strings.HasPrefix(uri, "postdare-go://projects/"):
 		id := strings.TrimPrefix(uri, "postdare-go://projects/")
 		result, err = s.client.Get("/api/v1/projects/"+id, nil)
+	case strings.HasPrefix(uri, "postdare-go://reports/"):
+		id := strings.TrimPrefix(uri, "postdare-go://reports/")
+		result, err = s.client.Get("/api/v1/reports/"+id, nil)
+	case strings.HasPrefix(uri, "postdare-go://deploy-tasks/") && strings.HasSuffix(uri, "/reports"):
+		id := between(uri, "postdare-go://deploy-tasks/", "/reports")
+		result, err = s.client.Get("/api/v1/deploy-tasks/"+id+"/reports", nil)
 	case strings.HasPrefix(uri, "postdare-go://deploy-tasks/") && strings.HasSuffix(uri, "/logs"):
 		id := between(uri, "postdare-go://deploy-tasks/", "/logs")
 		q := url.Values{"lines": []string{"200"}}
@@ -278,6 +288,8 @@ func tools() []map[string]interface{} {
 		{"name": "postdare_go.trigger_deploy", "description": "Trigger a deploy. Requires backend mcp.allow_mutation_tools=true and confirm=true.", "inputSchema": schema(map[string]interface{}{"project_id": intProp, "confirm": boolProp}, []string{"project_id", "confirm"})},
 		{"name": "postdare_go.trigger_rollback", "description": "Trigger rollback. Requires backend mcp.allow_mutation_tools=true and confirm=true.", "inputSchema": schema(map[string]interface{}{"project_id": intProp, "confirm": boolProp}, []string{"project_id", "confirm"})},
 		{"name": "postdare_go.analyze_failed_deploy", "description": "Analyze failed deploy by rules and logs.", "inputSchema": schema(map[string]interface{}{"task_id": intProp}, []string{"task_id"})},
+		{"name": "postdare_go.list_deploy_task_reports", "description": "List reports captured by a deploy task, with summary, issues and markdown.", "inputSchema": schema(map[string]interface{}{"task_id": intProp}, []string{"task_id"})},
+		{"name": "postdare_go.get_report", "description": "Get one report by id, including its issues and markdown body.", "inputSchema": schema(map[string]interface{}{"report_id": intProp}, []string{"report_id"})},
 	}
 }
 
@@ -293,6 +305,8 @@ func resourceTemplates() []map[string]string {
 		{"uriTemplate": "postdare-go://deploy-tasks/{task_id}", "name": "Deploy task detail", "mimeType": "application/json"},
 		{"uriTemplate": "postdare-go://deploy-tasks/{task_id}/logs", "name": "Deploy logs", "mimeType": "application/json"},
 		{"uriTemplate": "postdare-go://projects/{project_id}/app-logs", "name": "Application logs", "mimeType": "application/json"},
+		{"uriTemplate": "postdare-go://deploy-tasks/{task_id}/reports", "name": "Deploy task reports", "mimeType": "application/json"},
+		{"uriTemplate": "postdare-go://reports/{report_id}", "name": "Report detail", "mimeType": "application/json"},
 	}
 }
 
