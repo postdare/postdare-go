@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hellodeveye/postdare-go/internal/config"
+	"github.com/hellodeveye/postdare-go/internal/mcp"
 	"github.com/hellodeveye/postdare-go/internal/middleware"
 	"github.com/hellodeveye/postdare-go/internal/service"
 	"github.com/hellodeveye/postdare-go/internal/sse"
@@ -67,6 +68,25 @@ func RegisterRoutes(r *gin.Engine, h *Handler) {
 
 	secured.GET("/settings", h.GetSettings)
 	secured.PATCH("/settings", h.PatchSettings)
+
+	registerMCPEndpoint(r, h)
+}
+
+// registerMCPEndpoint mounts the MCP Streamable HTTP transport at /mcp, next
+// to the REST API rather than under it: an MCP client is pointed at one URL,
+// not at a versioned API path. The tools it serves loop back through this same
+// engine in process, so they answer to the handlers, auth and mutation gates
+// the REST API already enforces.
+func registerMCPEndpoint(r *gin.Engine, h *Handler) {
+	if !h.Config.MCP.Enabled {
+		return
+	}
+	server := mcp.NewLocalServer(r, h.Config.MCP.APIToken)
+	endpoint := r.Group("/mcp")
+	endpoint.Use(middleware.Auth(h.Config))
+	endpoint.POST("", h.MCPEndpoint(server))
+	endpoint.GET("", MCPMethodNotAllowed)
+	endpoint.DELETE("", MCPMethodNotAllowed)
 }
 
 func parseUintParam(c *gin.Context, name string) (uint64, bool) {

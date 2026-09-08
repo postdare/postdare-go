@@ -16,7 +16,7 @@ Postdare Go 适合一台或少量 Linux 服务器上的裸机部署流程。它�
 - 应用日志 tail 和 SSE 实时流
 - 部署记录、阶段记录、Webhook 事件记录
 - 出站 WebHook stage，兼容常见文本消息格式
-- stdio MCP Server，支持查询、日志读取、失败分析，以及受控触发部署/回滚
+- MCP Server，stdio 与 Streamable HTTP 双传输，支持查询、日志读取、报告读取、失败分析，以及受控触发部署/回滚
 - React 前端，暗色优先，支持浅色模式
 
 ## 技术栈
@@ -290,12 +290,23 @@ GET /api/v1/projects/{project_id}/app-logs/stream
 
 ## MCP Server
 
-启动：
+两种传输，工具集完全相同。详见 [docs/mcp.md](docs/mcp.md)。
+
+stdio：客户端把它拉起为子进程。
 
 ```bash
 POSTDARE_GO_BASE_URL=http://127.0.0.1:8088 \
 POSTDARE_GO_API_TOKEN="<mcp token from /data/postdare-go/secrets.yaml or config.yaml>" \
 go run . mcp
+```
+
+Streamable HTTP：`go run . serve` 已在 `POST /mcp` 暴露，用 MCP token 作 bearer。
+
+```bash
+curl -X POST http://127.0.0.1:8088/mcp \
+  -H "Authorization: Bearer <mcp token>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
 MCP tools：
@@ -309,6 +320,8 @@ MCP tools：
 - `postdare_go.trigger_deploy`
 - `postdare_go.trigger_rollback`
 - `postdare_go.analyze_failed_deploy`
+- `postdare_go.list_deploy_task_reports`
+- `postdare_go.get_report`
 
 默认情况下，MCP mutation tools 关闭：
 

@@ -13,6 +13,39 @@ import (
 	"time"
 )
 
+// ProtocolVersionLatest is the newest MCP revision this server implements.
+// The tool, resource and prompt surface is the same across every supported
+// revision, so negotiation only picks the string both sides speak.
+const ProtocolVersionLatest = "2025-06-18"
+
+// SupportedProtocolVersions lists the revisions accepted during initialize and
+// in a Streamable HTTP request's MCP-Protocol-Version header, oldest first.
+func SupportedProtocolVersions() []string {
+	return []string{"2024-11-05", "2025-03-26", ProtocolVersionLatest}
+}
+
+// IsSupportedProtocolVersion reports whether value names a revision this
+// server speaks.
+func IsSupportedProtocolVersion(value string) bool {
+	for _, supported := range SupportedProtocolVersions() {
+		if value == supported {
+			return true
+		}
+	}
+	return false
+}
+
+// negotiateProtocolVersion echoes the revision the client asked for when this
+// server speaks it, and otherwise proposes the newest one. A client that
+// cannot live with the answer disconnects, which is the negotiation the spec
+// asks for.
+func negotiateProtocolVersion(requested string) string {
+	if IsSupportedProtocolVersion(requested) {
+		return requested
+	}
+	return ProtocolVersionLatest
+}
+
 type Server struct {
 	client *RESTClient
 }
@@ -75,8 +108,14 @@ func (s *Server) HandleLine(line []byte) ([]byte, bool) {
 func (s *Server) dispatch(method string, params json.RawMessage) (interface{}, error) {
 	switch method {
 	case "initialize":
+		var p struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		}
+		if len(params) > 0 {
+			_ = json.Unmarshal(params, &p)
+		}
 		return map[string]interface{}{
-			"protocolVersion": "2024-11-05",
+			"protocolVersion": negotiateProtocolVersion(p.ProtocolVersion),
 			"capabilities": map[string]interface{}{
 				"tools":     map[string]interface{}{},
 				"resources": map[string]interface{}{},
