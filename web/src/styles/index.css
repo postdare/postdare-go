@@ -108,6 +108,11 @@ select {
 .report-section { margin-top: 32px; }
 .report-section-title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 15px; font-weight: 600; }
 .issue-row { display: grid; grid-template-columns: 72px 1fr; gap: 16px; padding: 18px 0; }
+/* Trigger / impact / suggestion are prose of very uneven length, so they read as
+   labelled rows rather than three columns squeezed side by side. */
+.issue-facts { display: grid; grid-template-columns: max-content 1fr; margin: 12px 0 0; border-top: 1px solid oklch(var(--border)); font-size: 13px; }
+.issue-facts dt { border-bottom: 1px solid oklch(var(--border)); padding: 7px 18px 7px 0; color: oklch(var(--muted)); font-weight: 500; white-space: nowrap; }
+.issue-facts dd { border-bottom: 1px solid oklch(var(--border)); margin: 0; padding: 7px 0; color: oklch(var(--ink)); line-height: 1.6; }
 .issue-diff { margin-top: 12px; border: 1px solid oklch(var(--border)); border-radius: 10px; background: oklch(var(--surface)); overflow: hidden; }
 .issue-diff-head { border-bottom: 1px solid oklch(var(--border)); background: oklch(var(--surface-2)); padding: 7px 12px; font-family: theme(fontFamily.mono); font-size: 12px; color: oklch(var(--ink)); }
 .issue-diff-body { overflow-x: auto; }
@@ -153,9 +158,28 @@ select {
 .report-markdown pre { max-width: 100%; overflow: auto; border-radius: 10px; background: oklch(var(--surface)); padding: 16px; font-family: theme(fontFamily.mono); font-size: 12px; line-height: 1.65; }
 .report-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
 .report-markdown th, .report-markdown td { border-bottom: 1px solid oklch(var(--border)); padding: 8px 12px; text-align: left; }
-.mermaid-diagram { overflow-x: auto; padding: 16px 0; }
+/* Prose is capped at 76ch for reading, but a diagram is not read line by line:
+   let it use the full width of the report column, out to the right edge. */
+.mermaid-figure { width: min(1080px, calc(100dvw - 32px)); max-width: none; margin: 16px 0; border: 1px solid oklch(var(--border)); border-radius: 10px; background: oklch(var(--surface)); }
+.mermaid-diagram { overflow-x: auto; padding: 16px 16px 4px; }
 .mermaid-diagram svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 .mermaid-loading { padding: 24px; color: oklch(var(--muted)); text-align: center; }
+/* A footer strip rather than a floating badge: at any width it stays clear of
+   the drawing instead of covering a corner of it. */
+.mermaid-expand { display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px; border: 0; border-top: 1px solid oklch(var(--border)); border-radius: 0 0 10px 10px; background: transparent; padding: 8px; color: oklch(var(--muted)); font-size: 12px; cursor: pointer; }
+.mermaid-expand:hover { color: oklch(var(--ink)); background: oklch(var(--surface-2)); }
+
+.mermaid-modal { width: 100dvw; max-width: 100dvw; height: 100dvh; max-height: 100dvh; display: flex; flex-direction: column; margin: 0; border: 0; padding: 0; background: oklch(var(--background)); color: oklch(var(--ink)); }
+.mermaid-modal::backdrop { background: oklch(0 0 0 / 0.6); }
+.mermaid-modal-bar { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid oklch(var(--border)); background: oklch(var(--surface)); padding: 8px 12px; }
+.mermaid-modal-actions { display: flex; align-items: center; gap: 4px; }
+.mermaid-modal-actions button { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 30px; border: 1px solid oklch(var(--border)); border-radius: 8px; background: oklch(var(--background)); padding: 0 8px; color: oklch(var(--ink)); font-size: 12px; cursor: pointer; }
+.mermaid-modal-actions button:hover { background: oklch(var(--surface-2)); }
+.mermaid-zoom-value { min-width: 52px; text-align: center; color: oklch(var(--muted)); font-family: theme(fontFamily.mono); font-size: 12px; }
+.mermaid-modal-stage { flex: 1; display: grid; place-items: center; overflow: hidden; touch-action: none; cursor: grab; }
+.mermaid-modal-stage:active { cursor: grabbing; }
+.mermaid-modal-canvas { transform-origin: center; }
+.mermaid-modal-canvas svg { display: block; width: min(1600px, 94dvw); max-width: none; max-height: 84dvh; height: auto; }
 
 @media (max-width: 640px) {
   .report-header-inner, .report-overview { align-items: flex-start; flex-direction: column; }
@@ -163,4 +187,7 @@ select {
   .report-commit { padding-left: 50px; }
   .risk-counts { width: 100%; justify-content: space-between; }
   .issue-row { grid-template-columns: 1fr; gap: 10px; }
+  .issue-facts { grid-template-columns: 1fr; }
+  .issue-facts dt { border-bottom: 0; padding-bottom: 0; }
+  .issue-facts dd { padding-top: 2px; }
 }

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { isValidElement, useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, FileSearch, GitCommitHorizontal, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileSearch, GitCommitHorizontal, Maximize2, Minus, Plus, ShieldAlert, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { useParams } from "react-router-dom";
 import rehypeSanitize from "rehype-sanitize";
@@ -109,7 +109,7 @@ export function PublicReportPage() {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeSanitize]}
-              components={{ code: MarkdownCode }}
+              components={{ code: MarkdownCode, pre: MarkdownPre }}
             >
               {data.markdown || "_No detailed report was provided._"}
             </ReactMarkdown>
@@ -127,9 +127,19 @@ function MarkdownCode({ className, children, ...props }: React.ComponentPropsWit
   return <code className={className} {...props}>{children}</code>;
 }
 
+// A diagram renders as a <figure>, which cannot live inside the <pre> that
+// react-markdown wraps a fenced block in; unwrap the <pre> for those blocks.
+function MarkdownPre({ children, ...props }: React.ComponentPropsWithoutRef<"pre">) {
+  const child = Array.isArray(children) ? children[0] : children;
+  const className = isValidElement<{ className?: string }>(child) ? child.props.className ?? "" : "";
+  if (/\blanguage-mermaid\b/.test(className)) return <>{children}</>;
+  return <pre {...props}>{children}</pre>;
+}
+
 function MermaidDiagram({ source }: { source: string }) {
   const [svg, setSvg] = useState("");
   const [failed, setFailed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     let active = true;
     void import("mermaid").then(async ({ default: mermaid }) => {
@@ -141,7 +151,81 @@ function MermaidDiagram({ source }: { source: string }) {
   }, [source]);
   if (failed) return <pre><code className="language-mermaid">{source}</code></pre>;
   if (!svg) return <div className="mermaid-loading">Rendering diagram…</div>;
-  return <div className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
+  return (
+    <figure className="mermaid-figure">
+      <div className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />
+      <button type="button" className="mermaid-expand" onClick={() => setExpanded(true)}>
+        <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" /> Full screen
+      </button>
+      {expanded ? <MermaidViewer svg={svg} onClose={() => setExpanded(false)} /> : null}
+    </figure>
+  );
+}
+
+const zoomRange = { min: 0.4, max: 8 };
+const clampZoom = (scale: number) => Math.min(zoomRange.max, Math.max(zoomRange.min, scale));
+const identityView = { scale: 1, x: 0, y: 0 };
+
+// A full-viewport view of one diagram: wheel or the buttons zoom, dragging pans,
+// and Escape closes it -- a native <dialog> gives us the top layer and that key.
+function MermaidViewer({ svg, onClose }: { svg: string; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const [view, setView] = useState(identityView);
+
+  useEffect(() => { if (!dialogRef.current?.open) dialogRef.current?.showModal(); }, []);
+  // The wheel listener has to be non-passive to keep the page behind from
+  // scrolling, which rules out React's own onWheel.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      setView((current) => ({ ...current, scale: clampZoom(current.scale * (event.deltaY < 0 ? 1.12 : 1 / 1.12)) }));
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, []);
+
+  const zoomBy = useCallback((factor: number) => setView((current) => ({ ...current, scale: clampZoom(current.scale * factor) })), []);
+
+  return (
+    <dialog ref={dialogRef} className="mermaid-modal" onClose={onClose}>
+      <div className="mermaid-modal-bar">
+        <span className="text-xs text-muted">Drag to pan · scroll to zoom</span>
+        <div className="mermaid-modal-actions">
+          <button type="button" onClick={() => zoomBy(1 / 1.25)} aria-label="Zoom out"><Minus className="h-4 w-4" /></button>
+          <span className="mermaid-zoom-value">{Math.round(view.scale * 100)}%</span>
+          <button type="button" onClick={() => zoomBy(1.25)} aria-label="Zoom in"><Plus className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setView(identityView)}>Reset</button>
+          <button type="button" onClick={() => dialogRef.current?.close()} aria-label="Close"><X className="h-4 w-4" /></button>
+        </div>
+      </div>
+      <div
+        ref={stageRef}
+        className="mermaid-modal-stage"
+        onPointerDown={(event) => {
+          drag.current = { pointerId: event.pointerId, x: event.clientX - view.x, y: event.clientY - view.y };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const from = drag.current;
+          if (!from || from.pointerId !== event.pointerId) return;
+          setView((current) => ({ ...current, x: event.clientX - from.x, y: event.clientY - from.y }));
+        }}
+        onPointerUp={() => { drag.current = null; }}
+        onPointerCancel={() => { drag.current = null; }}
+        onDoubleClick={() => setView(identityView)}
+      >
+        <div
+          className="mermaid-modal-canvas"
+          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      </div>
+    </dialog>
+  );
 }
 
 function IssueRow({ issue }: { issue: ReportIssue }) {
@@ -155,7 +239,7 @@ function IssueRow({ issue }: { issue: ReportIssue }) {
         {issue.location && !issue.diff_hunk ? (
           <code className="mt-1 block break-all text-xs text-info">{issue.location}</code>
         ) : null}
-        <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+        <dl className="issue-facts">
           {issue.trigger ? <IssueDetail label="Trigger" value={issue.trigger} /> : null}
           {issue.impact ? <IssueDetail label="Impact" value={issue.impact} /> : null}
           {issue.suggestion ? <IssueDetail label="Suggestion" value={issue.suggestion} /> : null}
@@ -278,8 +362,10 @@ function DiffHunk({ hunk, location }: { hunk: string; location?: string }) {
   );
 }
 
+// One row of the finding's fact table: the label in its own column so the prose
+// beside it keeps the full width of the row instead of a third of it.
 function IssueDetail({ label, value }: { label: string; value: string }) {
-  return <div><dt className="text-xs font-medium text-muted">{label}</dt><dd className="mt-0.5 leading-5 text-ink">{value}</dd></div>;
+  return <><dt>{label}</dt><dd>{value}</dd></>;
 }
 
 function RiskCount({ label, count, tone }: { label: string; count: number; tone: string }) {
