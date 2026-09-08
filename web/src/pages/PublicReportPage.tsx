@@ -154,8 +154,8 @@ function MermaidDiagram({ source }: { source: string }) {
   return (
     <figure className="mermaid-figure">
       <div className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />
-      <button type="button" className="mermaid-expand" onClick={() => setExpanded(true)}>
-        <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" /> Full screen
+      <button type="button" className="mermaid-expand" onClick={() => setExpanded(true)} title="Full screen" aria-label="Full screen">
+        <Maximize2 className="h-4 w-4" aria-hidden="true" />
       </button>
       {expanded ? <MermaidViewer svg={svg} onClose={() => setExpanded(false)} /> : null}
     </figure>
@@ -239,11 +239,7 @@ function IssueRow({ issue }: { issue: ReportIssue }) {
         {issue.location && !issue.diff_hunk ? (
           <code className="mt-1 block break-all text-xs text-info">{issue.location}</code>
         ) : null}
-        <dl className="issue-facts">
-          {issue.trigger ? <IssueDetail label="Trigger" value={issue.trigger} /> : null}
-          {issue.impact ? <IssueDetail label="Impact" value={issue.impact} /> : null}
-          {issue.suggestion ? <IssueDetail label="Suggestion" value={issue.suggestion} /> : null}
-        </dl>
+        <IssueFacts issue={issue} />
         {issue.diff_hunk ? <DiffHunk hunk={issue.diff_hunk} location={issue.location} /> : null}
       </div>
     </article>
@@ -362,10 +358,27 @@ function DiffHunk({ hunk, location }: { hunk: string; location?: string }) {
   );
 }
 
-// One row of the finding's fact table: the label in its own column so the prose
-// beside it keeps the full width of the row instead of a third of it.
-function IssueDetail({ label, value }: { label: string; value: string }) {
-  return <><dt>{label}</dt><dd>{value}</dd></>;
+// Trigger, impact and suggestion read as one table with a header row: the three
+// of them tell one story about the finding, so they belong side by side. A field
+// the reviewer left out drops its whole column rather than heading an empty cell.
+function IssueFacts({ issue }: { issue: ReportIssue }) {
+  const facts = [
+    { label: "Trigger", value: issue.trigger },
+    { label: "Impact", value: issue.impact },
+    { label: "Suggestion", value: issue.suggestion },
+  ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value));
+  if (facts.length === 0) return null;
+  return (
+    <table className="issue-facts">
+      <thead>
+        <tr>{facts.map((fact) => <th key={fact.label} scope="col">{fact.label}</th>)}</tr>
+      </thead>
+      <tbody>
+        {/* Narrow screens hide the header row and label each cell from data-label. */}
+        <tr>{facts.map((fact) => <td key={fact.label} data-label={fact.label}>{fact.value}</td>)}</tr>
+      </tbody>
+    </table>
+  );
 }
 
 function RiskCount({ label, count, tone }: { label: string; count: number; tone: string }) {
