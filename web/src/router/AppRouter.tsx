@@ -10,6 +10,7 @@ import { LoginPage } from "../pages/LoginPage";
 import { ProjectDetailPage } from "../pages/ProjectDetailPage";
 import { ProjectFormPage } from "../pages/ProjectFormPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
+import { ReportsPage } from "../pages/ReportsPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { WebhookEventsPage } from "../pages/WebhookEventsPage";
 import { PublicReportPage } from "../pages/PublicReportPage";
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { path: "projects/:id/settings", element: <ProjectFormPage /> },
       { path: "deploy-tasks", element: <DeployTasksPage /> },
       { path: "deploy-tasks/:id", element: <DeployTaskDetailPage /> },
+      { path: "reports", element: <ReportsPage /> },
       { path: "webhook-events", element: <WebhookEventsPage /> },
       { path: "settings", element: <SettingsPage /> }
     ]

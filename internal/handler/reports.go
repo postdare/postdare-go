@@ -61,6 +61,36 @@ func (h *Handler) ListDeployTaskReports(c *gin.Context) {
 	util.OK(c, out)
 }
 
+// ListReports serves the global reports page. Like the per-task listing it
+// reuses reportResponse so a row here carries the same fields as a report
+// opened from a deploy task.
+func (h *Handler) ListReports(c *gin.Context) {
+	page, pageSize, offset := util.ParsePagination(c)
+	query := h.DB.Model(&model.Report{})
+	if projectID := c.Query("project_id"); projectID != "" {
+		query = query.Where("project_id = ?", projectID)
+	}
+	if status := c.Query("status"); status != "" {
+		query = query.Where("status = ?", status)
+	}
+	var total int64
+	_ = query.Count(&total).Error
+	var reports []model.Report
+	if err := query.Order("id desc").Limit(pageSize).Offset(offset).Find(&reports).Error; err != nil {
+		util.Error(c, http.StatusInternalServerError, "REPORT_LIST_FAILED", "Failed to list reports", nil)
+		return
+	}
+	out := make([]reportResponse, 0, len(reports))
+	for _, report := range reports {
+		response, err := h.reportResponse(report)
+		if err == nil {
+			out = append(out, response)
+		}
+	}
+	c.Header("Cache-Control", "no-store")
+	util.List(c, out, util.Pagination{Page: page, PageSize: pageSize, Total: total})
+}
+
 func (h *Handler) GetReport(c *gin.Context) {
 	report, ok := h.loadReport(c)
 	if !ok {

@@ -56,6 +56,7 @@ func RegisterRoutes(r *gin.Engine, h *Handler) {
 	secured.POST("/deploy-tasks/:task_id/cancel", h.CancelDeployTask)
 	secured.GET("/deploy-tasks/:task_id/analysis", h.AnalyzeDeployTask)
 	secured.GET("/deploy-tasks/:task_id/reports", h.ListDeployTaskReports)
+	secured.GET("/reports", h.ListReports)
 	secured.GET("/reports/:report_id", h.GetReport)
 	secured.POST("/reports/:report_id/share", h.ShareReport)
 	secured.DELETE("/reports/:report_id/share", h.RevokeReportShare)
