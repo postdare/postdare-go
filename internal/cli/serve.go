@@ -73,6 +73,14 @@ func Serve(version string) error {
 	if err := svc.ReconcileInterruptedTasks(); err != nil {
 		return fmt.Errorf("task reconciliation failed: %w", err)
 	}
+	// Images pasted into an issue that was never saved would otherwise pile up
+	// forever. This is a housekeeping pass, not a precondition for serving, so a
+	// failure is logged rather than kept from starting the server.
+	if swept, err := svc.SweepOrphanAttachments(context.Background(), service.OrphanAttachmentAge); err != nil {
+		logger.Warn("orphan attachment sweep failed", zap.Error(err))
+	} else if swept > 0 {
+		logger.Info("swept orphan attachments", zap.Int("count", swept))
+	}
 	h := &handler.Handler{DB: database, Config: cfg, Service: svc, Hub: hub, AppVersion: version}
 
 	gin.SetMode(gin.ReleaseMode)

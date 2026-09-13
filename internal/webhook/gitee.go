@@ -49,6 +49,7 @@ func (GiteeWebhookParser) Parse(headers http.Header, body []byte) (*Event, error
 		CommitMessage:  stringFromMap(commit, "message"),
 		CommitAuthor:   firstNonEmpty(stringFromMap(author, "name"), stringFromMap(author, "username"), stringFromMap(author, "email")),
 		DeliveryID:     firstNonEmpty(headers.Get("X-Gitee-Delivery"), headers.Get("X-Git-Osc-Delivery")),
+		Commits:        commitsFromMap(payload, "commits"),
 		RawPayload:     body,
 	}, nil
 }

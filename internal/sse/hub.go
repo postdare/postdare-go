@@ -49,3 +49,8 @@ func (h *Hub) Publish(topic string, line string) {
 func DeployTopic(taskID uint64) string {
 	return "deploy:" + strconv.FormatUint(taskID, 10)
 }
+
+// BoardTopic names the stream a board view subscribes to for issue changes.
+func BoardTopic(boardID uint64) string {
+	return "board:" + strconv.FormatUint(boardID, 10)
+}

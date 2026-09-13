@@ -320,3 +320,10 @@ func (c *Config) JWTDuration() time.Duration {
 func (c *Config) CommandTimeout() time.Duration {
 	return time.Duration(c.Deploy.CommandTimeoutMinutes) * time.Minute
 }
+
+// AttachmentDir is where issue image uploads are stored. It is derived from
+// DataDir rather than configured separately so that the one path an operator
+// sets keeps holding everything the server owns, the way deploy logs already do.
+func (c *Config) AttachmentDir() string {
+	return filepath.Join(c.DataDir, "attachments")
+}

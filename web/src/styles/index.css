@@ -74,6 +74,21 @@ select {
   scrollbar-color: oklch(var(--border)) transparent;
 }
 
+/* A scrollbar is furniture, not content. On a board it sits right beside the
+   cards, so it stays invisible until the pointer is over the area it belongs to
+   and is thin enough not to compete when it does appear. The track keeps its
+   width either way, so nothing shifts as the thumb fades in, and focus-within
+   keeps it visible for someone navigating the column from the keyboard. */
+.scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.scrollbar-subtle:hover,
+.scrollbar-subtle:focus-within {
+  scrollbar-color: oklch(var(--muted) / 0.35) transparent;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

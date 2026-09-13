@@ -81,6 +81,12 @@ func (s *Service) DeleteProject(ctx context.Context, projectID uint64) error {
 			if err := tx.Where("task_id IN ?", taskIDs).Delete(&model.Report{}).Error; err != nil {
 				return err
 			}
+			// The issues themselves outlive the project -- work is not undone by
+			// retiring the service that shipped it -- but a link to a deploy task
+			// that no longer exists would render as a dead row on the issue.
+			if err := tx.Where("task_id IN ?", taskIDs).Delete(&model.IssueDeployLink{}).Error; err != nil {
+				return err
+			}
 			if err := tx.Where("task_id IN ?", taskIDs).Delete(&model.DeployTaskStage{}).Error; err != nil {
 				return err
 			}
@@ -89,6 +95,10 @@ func (s *Service) DeleteProject(ctx context.Context, projectID uint64) error {
 			}
 		}
 		if err := tx.Where("project_id = ? OR project_key = ?", projectID, project.ProjectKey).Delete(&model.WebhookEvent{}).Error; err != nil {
+			return err
+		}
+		// A board keeps its issues and simply loses the project link.
+		if err := tx.Model(&model.Board{}).Where("project_id = ?", projectID).Update("project_id", nil).Error; err != nil {
 			return err
 		}
 		if err := tx.Delete(&project).Error; err != nil {

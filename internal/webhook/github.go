@@ -41,6 +41,7 @@ func (GitHubWebhookParser) Parse(headers http.Header, body []byte) (*Event, erro
 		CommitMessage:  stringFromMap(commit, "message"),
 		CommitAuthor:   firstNonEmpty(stringFromMap(author, "name"), stringFromMap(author, "username"), stringFromMap(author, "email")),
 		DeliveryID:     headers.Get("X-GitHub-Delivery"),
+		Commits:        commitsFromMap(payload, "commits"),
 		RawPayload:     body,
 	}, nil
 }

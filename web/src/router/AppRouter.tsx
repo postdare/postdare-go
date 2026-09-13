@@ -2,7 +2,10 @@ import { Navigate, createBrowserRouter, useLocation } from "react-router-dom";
 
 import { AppShell } from "../layouts/AppShell";
 import { useAuthStore } from "../store/auth";
+import { BoardPage } from "../pages/BoardPage";
+import { BoardsPage } from "../pages/BoardsPage";
 import { ChangePasswordPage } from "../pages/ChangePasswordPage";
+import { IssuePage } from "../pages/IssuePage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { DeployTaskDetailPage } from "../pages/DeployTaskDetailPage";
 import { DeployTasksPage } from "../pages/DeployTasksPage";
@@ -39,6 +42,10 @@ export const router = createBrowserRouter([
       { path: "projects/new", element: <ProjectFormPage /> },
       { path: "projects/:id", element: <ProjectDetailPage /> },
       { path: "projects/:id/settings", element: <ProjectFormPage /> },
+      { path: "boards", element: <BoardsPage /> },
+      { path: "boards/:id", element: <BoardPage /> },
+      { path: "boards/:boardId/issues/new", element: <IssuePage /> },
+      { path: "issues/:issueId", element: <IssuePage /> },
       { path: "deploy-tasks", element: <DeployTasksPage /> },
       { path: "deploy-tasks/:id", element: <DeployTaskDetailPage /> },
       { path: "webhook-events", element: <WebhookEventsPage /> },

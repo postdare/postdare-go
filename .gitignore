@@ -21,3 +21,6 @@ web/vite.config.d.ts
 *.swp
 data/
 .omx/
+
+# Agent-local settings (may hold machine-specific paths/secrets)
+.claude/settings.local.json

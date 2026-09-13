@@ -64,6 +64,10 @@ func (s *Service) CreateDeployTask(ctx context.Context, project model.Project, t
 	}); err != nil {
 		return nil, err
 	}
+	// Commits name the issues this release carries, so the links are drawn as
+	// soon as the task exists -- a board should show work as shipping while the
+	// deploy runs, not only once it lands.
+	s.LinkIssuesFromEvent(ctx, task.ID, ev)
 	if err := s.startTask(task.ID); err != nil {
 		now := time.Now()
 		_ = s.DB.WithContext(ctx).Model(task).Updates(map[string]interface{}{
@@ -160,4 +164,7 @@ func (s *Service) finishTask(ctx context.Context, task *model.DeployTask, status
 		"current_stage": task.CurrentStage,
 	}).Error
 	runner.AppendLog(task.LogFile, s.Hub, task.ID, "task", "task finished with status "+status)
+	if status == model.TaskSuccess {
+		s.CloseIssuesForTask(ctx, task.ID)
+	}
 }

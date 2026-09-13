@@ -171,3 +171,67 @@ export interface DataResponse<T> {
   data: T;
   request_id?: string;
 }
+
+export type IssueStatus = "backlog" | "todo" | "in_progress" | "done" | "canceled";
+export type IssuePriority = "urgent" | "high" | "medium" | "low" | "none";
+
+export interface Board {
+  id: number;
+  name: string;
+  key: string;
+  description?: string;
+  project_id?: number | null;
+  project_name?: string;
+  issue_counts: Record<IssueStatus, number>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** A release that carried this issue. `closing` marks a commit that asked for
+ *  the issue to be finished, which is what lets a successful deploy close it. */
+export interface IssueDeployLink {
+  task_id: number;
+  project_id: number;
+  project_name?: string;
+  status: DeployStatus;
+  branch?: string;
+  commit_id?: string;
+  closing: boolean;
+  source: "auto" | "manual";
+  finished_at?: string | null;
+  created_at: string;
+}
+
+export interface Issue {
+  id: number;
+  board_id: number;
+  number: number;
+  /** The board-scoped name, e.g. ENG-42 — what people type in a commit message. */
+  identifier: string;
+  board_key: string;
+  title: string;
+  description?: string;
+  status: IssueStatus;
+  priority: IssuePriority;
+  assignee_id?: number | null;
+  assignee_name?: string;
+  creator_id?: number | null;
+  creator_name?: string;
+  labels: string[];
+  position: string;
+  deploy_links: IssueDeployLink[];
+  completed_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BoardUser {
+  id: number;
+  username: string;
+  role: string;
+}
+
+export interface IssueMetadata {
+  statuses: IssueStatus[];
+  priorities: IssuePriority[];
+}
