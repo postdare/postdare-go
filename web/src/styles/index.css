@@ -89,6 +89,38 @@ select {
   scrollbar-color: oklch(var(--muted) / 0.35) transparent;
 }
 
+/* The description editor. It shares its typography with the read view through
+   markdownContentClass, so what is here is only what belongs to typing. */
+.tiptap,
+.ProseMirror {
+  min-height: 4.5rem;
+}
+
+.tiptap:focus-visible,
+.ProseMirror:focus-visible {
+  outline: none;
+}
+
+/* Placeholder text lives in a pseudo element so an empty editor still has no
+   content: an empty <p> would otherwise be saved as a stray newline. */
+.tiptap p.is-editor-empty:first-child::before,
+.ProseMirror p.is-editor-empty:first-child::before {
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: oklch(var(--muted));
+  content: attr(data-placeholder);
+}
+
+/* A selected image is otherwise indistinguishable from an unselected one. */
+.tiptap .ProseMirror-selectednode img,
+.ProseMirror .ProseMirror-selectednode img,
+.tiptap img.ProseMirror-selectednode,
+.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid oklch(var(--primary));
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
