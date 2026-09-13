@@ -54,6 +54,46 @@ Create an empty database before starting the service. Tables are created by Auto
 The one-off `copydb` subcommand used for the 2026-07 MySQL → SQLite migration has been
 removed; recover it from git history if a similar migration is ever needed again.
 
+## Reverse Proxy
+
+A proxy in front of the server only has to forward everything, because the one
+binary answers on three surfaces:
+
+```caddyfile
+go.postdare.example.com {
+	reverse_proxy 127.0.0.1:8088
+}
+```
+
+- `/api/*` — the REST API
+- `/mcp` — the MCP Streamable HTTP endpoint, mounted next to the REST API rather
+  than under it, so a proxy rule that only covers `/api/*` misses it
+- everything else — the web UI, embedded in the binary
+
+A common split is to let the proxy serve the UI from disk instead, since the build
+output is a plain directory. That is fine, but `/mcp` then needs its own line:
+
+```caddyfile
+:18081 {
+	route {
+		reverse_proxy /api/* 127.0.0.1:18088
+		reverse_proxy /mcp 127.0.0.1:18088
+		root * /opt/postdare-go/frontend/dist
+		try_files {path} /index.html
+		file_server
+	}
+}
+```
+
+Forgetting that line fails quietly rather than loudly. `POST /mcp` falls through
+to the SPA file server, which answers `405` with `Allow: GET, HEAD`, and `GET /mcp`
+answers the app's HTML with `200` — the endpoint looks present but broken. The test
+that tells the two apart: the app itself answers `GET /mcp` with `405 Allow: POST`,
+so an `Allow` header without `POST` means the request never reached the server.
+
+The stdio transport (`postdare-go mcp`) is unaffected either way, because it speaks
+to the REST API instead of the endpoint.
+
 ## Deploy Stages
 
 Each project defines an ordered list of typed deploy stages (`deploy_stages`). Supported
