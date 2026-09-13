@@ -210,6 +210,9 @@ func (h *Handler) CreateBoardIssue(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !h.allowMCPMutation(c) {
+		return
+	}
 	var payload struct {
 		Title       string   `json:"title"`
 		Description string   `json:"description"`
@@ -252,6 +255,9 @@ func (h *Handler) GetIssue(c *gin.Context) {
 func (h *Handler) UpdateIssue(c *gin.Context) {
 	issue, board, ok := h.loadIssue(c)
 	if !ok {
+		return
+	}
+	if !h.allowMCPMutation(c) {
 		return
 	}
 	var payload struct {
@@ -347,6 +353,9 @@ func (h *Handler) UpdateIssue(c *gin.Context) {
 func (h *Handler) MoveIssue(c *gin.Context) {
 	issue, board, ok := h.loadIssue(c)
 	if !ok {
+		return
+	}
+	if !h.allowMCPMutation(c) {
 		return
 	}
 	var payload struct {

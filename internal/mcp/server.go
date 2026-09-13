@@ -208,6 +208,53 @@ func (s *Server) callTool(name string, args map[string]interface{}) (interface{}
 		result, err = s.client.Get(fmt.Sprintf("/api/v1/deploy-tasks/%d/reports", uintArg(args, "task_id")), nil)
 	case "postdare_go.get_report":
 		result, err = s.client.Get(fmt.Sprintf("/api/v1/reports/%d", uintArg(args, "report_id")), nil)
+	case "postdare_go.list_boards":
+		result, err = s.client.Get("/api/v1/boards", nil)
+	case "postdare_go.get_board":
+		result, err = s.client.Get(fmt.Sprintf("/api/v1/boards/%d", uintArg(args, "board_id")), nil)
+	case "postdare_go.list_board_issues":
+		q := url.Values{}
+		if status := strArg(args, "status"); status != "" {
+			q.Set("status", status)
+		}
+		if priority := strArg(args, "priority"); priority != "" {
+			q.Set("priority", priority)
+		}
+		// assignee_id carries "none" as well as an id, so the string form has to
+		// reach the query rather than being parsed into a number.
+		if assignee := strArg(args, "assignee_id"); assignee != "" {
+			q.Set("assignee_id", assignee)
+		}
+		if search := strArg(args, "q"); search != "" {
+			q.Set("q", search)
+		}
+		result, err = s.client.Get(fmt.Sprintf("/api/v1/boards/%d/issues", uintArg(args, "board_id")), q)
+	case "postdare_go.get_issue":
+		result, err = s.client.Get(fmt.Sprintf("/api/v1/issues/%d", uintArg(args, "issue_id")), nil)
+	case "postdare_go.create_issue":
+		body := map[string]interface{}{"title": strArg(args, "title"), "confirm": boolArg(args, "confirm")}
+		optionalStr(args, "description", body)
+		optionalStr(args, "status", body)
+		optionalStr(args, "priority", body)
+		optionalUint(args, "assignee_id", body)
+		optionalLabels(args, "labels", body)
+		result, err = s.client.Post(fmt.Sprintf("/api/v1/boards/%d/issues", uintArg(args, "board_id")), body)
+	case "postdare_go.update_issue":
+		body := map[string]interface{}{"confirm": boolArg(args, "confirm")}
+		optionalStr(args, "title", body)
+		optionalStr(args, "description", body)
+		optionalStr(args, "status", body)
+		optionalStr(args, "priority", body)
+		optionalUint(args, "assignee_id", body)
+		optionalBool(args, "clear_assignee", body)
+		optionalLabels(args, "labels", body)
+		result, err = s.client.Patch(fmt.Sprintf("/api/v1/issues/%d", uintArg(args, "issue_id")), body)
+	case "postdare_go.move_issue":
+		body := map[string]interface{}{"confirm": boolArg(args, "confirm")}
+		optionalStr(args, "status", body)
+		optionalUint(args, "after_id", body)
+		optionalUint(args, "before_id", body)
+		result, err = s.client.Post(fmt.Sprintf("/api/v1/issues/%d/move", uintArg(args, "issue_id")), body)
 	default:
 		return nil, fmt.Errorf("unknown tool %s", name)
 	}
@@ -234,6 +281,17 @@ func (s *Server) readResource(uri string) (interface{}, error) {
 	case strings.HasPrefix(uri, "postdare-go://projects/"):
 		id := strings.TrimPrefix(uri, "postdare-go://projects/")
 		result, err = s.client.Get("/api/v1/projects/"+id, nil)
+	case uri == "postdare-go://boards":
+		result, err = s.client.Get("/api/v1/boards", nil)
+	case strings.HasPrefix(uri, "postdare-go://boards/") && strings.HasSuffix(uri, "/issues"):
+		id := between(uri, "postdare-go://boards/", "/issues")
+		result, err = s.client.Get("/api/v1/boards/"+id+"/issues", nil)
+	case strings.HasPrefix(uri, "postdare-go://boards/"):
+		id := strings.TrimPrefix(uri, "postdare-go://boards/")
+		result, err = s.client.Get("/api/v1/boards/"+id, nil)
+	case strings.HasPrefix(uri, "postdare-go://issues/"):
+		id := strings.TrimPrefix(uri, "postdare-go://issues/")
+		result, err = s.client.Get("/api/v1/issues/"+id, nil)
 	case strings.HasPrefix(uri, "postdare-go://reports/"):
 		id := strings.TrimPrefix(uri, "postdare-go://reports/")
 		result, err = s.client.Get("/api/v1/reports/"+id, nil)
@@ -272,6 +330,10 @@ func (c *RESTClient) Get(path string, q url.Values) (interface{}, error) {
 
 func (c *RESTClient) Post(path string, body interface{}) (interface{}, error) {
 	return c.Do(http.MethodPost, path, nil, body)
+}
+
+func (c *RESTClient) Patch(path string, body interface{}) (interface{}, error) {
+	return c.Do(http.MethodPatch, path, nil, body)
 }
 
 func (c *RESTClient) Do(method string, path string, q url.Values, body interface{}) (interface{}, error) {
@@ -329,12 +391,20 @@ func tools() []map[string]interface{} {
 		{"name": "postdare_go.analyze_failed_deploy", "description": "Analyze failed deploy by rules and logs.", "inputSchema": schema(map[string]interface{}{"task_id": intProp}, []string{"task_id"})},
 		{"name": "postdare_go.list_deploy_task_reports", "description": "List reports captured by a deploy task, with summary, issues and markdown.", "inputSchema": schema(map[string]interface{}{"task_id": intProp}, []string{"task_id"})},
 		{"name": "postdare_go.get_report", "description": "Get one report by id, including its issues and markdown body.", "inputSchema": schema(map[string]interface{}{"report_id": intProp}, []string{"report_id"})},
+		{"name": "postdare_go.list_boards", "description": "List issue boards with their linked project and per-column issue counts.", "inputSchema": schema(nil, nil)},
+		{"name": "postdare_go.get_board", "description": "Get one board by id.", "inputSchema": schema(map[string]interface{}{"board_id": intProp}, []string{"board_id"})},
+		{"name": "postdare_go.list_board_issues", "description": "List a board's issues, optionally filtered. Columns are backlog, todo, in_progress, done, canceled; priorities are urgent, high, medium, low, none.", "inputSchema": schema(map[string]interface{}{"board_id": intProp, "status": strProp, "priority": strProp, "assignee_id": strProp, "q": strProp}, []string{"board_id"})},
+		{"name": "postdare_go.get_issue", "description": "Get one issue by id, including its board key and the deploy tasks linked to it.", "inputSchema": schema(map[string]interface{}{"issue_id": intProp}, []string{"issue_id"})},
+		{"name": "postdare_go.create_issue", "description": "Create an issue on a board. Requires backend mcp.allow_mutation_tools=true and confirm=true.", "inputSchema": schema(map[string]interface{}{"board_id": intProp, "title": strProp, "description": strProp, "status": strProp, "priority": strProp, "assignee_id": intProp, "labels": map[string]string{"type": "array", "items": "string"}, "confirm": boolProp}, []string{"board_id", "title", "confirm"})},
+		{"name": "postdare_go.update_issue", "description": "Edit an issue in place; only the fields supplied are written. Requires backend mcp.allow_mutation_tools=true and confirm=true.", "inputSchema": schema(map[string]interface{}{"issue_id": intProp, "title": strProp, "description": strProp, "status": strProp, "priority": strProp, "assignee_id": intProp, "clear_assignee": boolProp, "labels": map[string]string{"type": "array", "items": "string"}, "confirm": boolProp}, []string{"issue_id", "confirm"})},
+		{"name": "postdare_go.move_issue", "description": "Move an issue to a column, optionally between two known neighbours. Requires backend mcp.allow_mutation_tools=true and confirm=true.", "inputSchema": schema(map[string]interface{}{"issue_id": intProp, "status": strProp, "after_id": intProp, "before_id": intProp, "confirm": boolProp}, []string{"issue_id", "confirm"})},
 	}
 }
 
 func resources() []map[string]string {
 	return []map[string]string{
 		{"uri": "postdare-go://projects", "name": "Projects", "mimeType": "application/json"},
+		{"uri": "postdare-go://boards", "name": "Boards", "mimeType": "application/json"},
 	}
 }
 
@@ -346,6 +416,9 @@ func resourceTemplates() []map[string]string {
 		{"uriTemplate": "postdare-go://projects/{project_id}/app-logs", "name": "Application logs", "mimeType": "application/json"},
 		{"uriTemplate": "postdare-go://deploy-tasks/{task_id}/reports", "name": "Deploy task reports", "mimeType": "application/json"},
 		{"uriTemplate": "postdare-go://reports/{report_id}", "name": "Report detail", "mimeType": "application/json"},
+		{"uriTemplate": "postdare-go://boards/{board_id}", "name": "Board detail", "mimeType": "application/json"},
+		{"uriTemplate": "postdare-go://boards/{board_id}/issues", "name": "Board issues", "mimeType": "application/json"},
+		{"uriTemplate": "postdare-go://issues/{issue_id}", "name": "Issue detail", "mimeType": "application/json"},
 	}
 }
 
@@ -384,6 +457,41 @@ func getPrompt(name string, args map[string]interface{}) (interface{}, error) {
 func strArg(args map[string]interface{}, key string) string {
 	v, _ := args[key].(string)
 	return v
+}
+
+// optionalStr copies an argument into a request body only when the caller sent
+// it. An absent key has to stay absent: the PATCH handler reads a missing field
+// as "not part of this edit", which is not the same as an empty one.
+func optionalStr(args map[string]interface{}, key string, body map[string]interface{}) {
+	if value, ok := args[key].(string); ok {
+		body[key] = value
+	}
+}
+
+func optionalUint(args map[string]interface{}, key string, body map[string]interface{}) {
+	if _, ok := args[key]; ok {
+		body[key] = uintArg(args, key)
+	}
+}
+
+func optionalBool(args map[string]interface{}, key string, body map[string]interface{}) {
+	if _, ok := args[key]; ok {
+		body[key] = boolArg(args, key)
+	}
+}
+
+func optionalLabels(args map[string]interface{}, key string, body map[string]interface{}) {
+	raw, ok := args[key].([]interface{})
+	if !ok {
+		return
+	}
+	labels := make([]string, 0, len(raw))
+	for _, entry := range raw {
+		if label, ok := entry.(string); ok {
+			labels = append(labels, label)
+		}
+	}
+	body[key] = labels
 }
 
 func uintArg(args map[string]interface{}, key string) uint64 {

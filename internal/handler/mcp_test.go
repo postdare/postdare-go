@@ -27,10 +27,13 @@ func setupMCPRouter(t *testing.T, mutate func(*config.Config)) *gin.Engine {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.Project{}, &model.DeployTask{}, &model.DeployTaskStage{}, &model.Report{}, &model.Setting{}, &model.User{}, &model.WebhookEvent{}); err != nil {
+	if err := database.AutoMigrate(&model.Project{}, &model.DeployTask{}, &model.DeployTaskStage{}, &model.Report{}, &model.Setting{}, &model.User{}, &model.WebhookEvent{}, &model.Board{}, &model.Issue{}, &model.IssueDeployLink{}, &model.Attachment{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Create(&model.Project{Name: "demo", ProjectKey: "demo", GitProvider: "gitee", Branch: "main"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Create(&model.Board{Name: "Engineering", Key: "ENG"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{}
@@ -134,6 +137,43 @@ func TestMCPEndpointHonoursMutationGate(t *testing.T) {
 	message := decodeRPC(t, recorder)["error"].(map[string]interface{})["message"].(string)
 	if !strings.Contains(message, "MCP_MUTATION_DISABLED") {
 		t.Fatalf("mutation was not refused: %s", message)
+	}
+}
+
+func toolText(t *testing.T, recorder *httptest.ResponseRecorder) string {
+	t.Helper()
+	decoded := decodeRPC(t, recorder)
+	if errObj, exists := decoded["error"]; exists {
+		t.Fatalf("tools/call failed: %v", errObj)
+	}
+	result := decoded["result"].(map[string]interface{})
+	return result["content"].([]interface{})[0].(map[string]interface{})["text"].(string)
+}
+
+// A board tool has to reach the REST handlers in process the same way the
+// project tools do, and a confirmed issue write has to land.
+func TestMCPEndpointBoardToolsReachRESTHandlers(t *testing.T) {
+	router := setupMCPRouter(t, func(cfg *config.Config) { cfg.MCP.AllowMutationTools = true })
+
+	recorder := postMCP(t, router, `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"postdare_go.list_boards","arguments":{}}}`)
+	if text := toolText(t, recorder); !strings.Contains(text, `"key": "ENG"`) {
+		t.Fatalf("board is missing from tool output: %s", text)
+	}
+
+	recorder = postMCP(t, router, `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"postdare_go.create_issue","arguments":{"board_id":1,"title":"fix login","confirm":true}}}`)
+	if text := toolText(t, recorder); !strings.Contains(text, `"identifier": "ENG-1"`) {
+		t.Fatalf("issue was not created: %s", text)
+	}
+}
+
+// The issue tools pass confirm through, and the handler is what reads it: with
+// the flag on but no confirm the write is refused before it reaches the table.
+func TestMCPEndpointIssueWriteNeedsConfirm(t *testing.T) {
+	router := setupMCPRouter(t, func(cfg *config.Config) { cfg.MCP.AllowMutationTools = true })
+	recorder := postMCP(t, router, `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"postdare_go.create_issue","arguments":{"board_id":1,"title":"unconfirmed"}}}`)
+	message := decodeRPC(t, recorder)["error"].(map[string]interface{})["message"].(string)
+	if !strings.Contains(message, "CONFIRM_REQUIRED") {
+		t.Fatalf("confirm was not required: %s", message)
 	}
 }
 
