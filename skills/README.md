@@ -34,7 +34,7 @@ cp -r skills/postdare-go-api  ~/.claude/skills/
 `postdare.py` 是个独立的 CLI，不依赖 skill 机制，也不依赖 pip：
 
 ```bash
-export POSTDARE_GO_BASE_URL=http://127.0.0.1:8088
+export POSTDARE_GO_BASE_URL=https://go.postdare.com   # 脚本默认值；换环境时才需要设
 export POSTDARE_GO_USERNAME=admin POSTDARE_GO_PASSWORD='...'
 # 或 export POSTDARE_GO_API_TOKEN='<mcp.api_token>'
 

@@ -32,7 +32,10 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-DEFAULT_BASE_URL = "http://127.0.0.1:8088"
+# This deployment's server is the default target, so the scripts work from a
+# laptop without any setup. POSTDARE_GO_BASE_URL still wins when set: a stage
+# running on the server itself, or a second environment, points elsewhere.
+DEFAULT_BASE_URL = "https://go.postdare.com"
 API_PREFIX = "/api/v1"
 TERMINAL_STATUSES = {"success", "failed", "canceled", "rollbacked"}
 ISSUE_STATUSES = {"backlog", "todo", "in_progress", "done", "canceled"}

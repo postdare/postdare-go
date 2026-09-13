@@ -294,7 +294,7 @@ DELETE 在项目还有 `pending`/`running` 任务时返回 `409`；物理的部�
 ## curl 速查
 
 ```bash
-BASE=http://127.0.0.1:8088
+BASE=https://go.postdare.com   # 换环境：本机 serve 就是 http://127.0.0.1:8088
 TOKEN=$(curl -s -X POST $BASE/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"..."}' | python3 -c 'import json,sys;print(json.load(sys.stdin)["data"]["token"])')

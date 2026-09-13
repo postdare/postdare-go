@@ -23,12 +23,14 @@ MCP token 在每条 `/api/v1` 路由上都被接受，但后端把它标记为 `
 另外两个前置条件容易忘：MCP token 只在 `mcp.enabled: true` 时被接受；账号如果还是生成的初始密码，除改密相关的三个接口外一律 `403 PASSWORD_CHANGE_REQUIRED`（脚本有 `passwd` 子命令）。
 
 ```bash
-export POSTDARE_GO_BASE_URL=http://127.0.0.1:8088   # 默认值，非本机时必须设
+export POSTDARE_GO_BASE_URL=https://go.postdare.com   # 脚本默认值；换环境时才需要设
 export POSTDARE_GO_USERNAME=admin
 export POSTDARE_GO_PASSWORD='...'
 # 或者
 export POSTDARE_GO_API_TOKEN='<secrets.yaml / config.yaml 里的 mcp.api_token>'
 ```
+
+脚本的默认目标是线上 `https://go.postdare.com`，本机起服务（`go run . serve`）调试时把它指回 `http://127.0.0.1:8088`。
 
 JWT 会缓存在 `~/.cache/postdare-go/tokens.json`（0600），过期或服务端轮换过 `jwt.secret` 时自动重登，所以循环调用不会每次都打 `/auth/login`。
 
