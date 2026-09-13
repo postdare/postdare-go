@@ -7,10 +7,9 @@ import { cn } from "../../lib/utils";
 
 /** Shared by both sides of the field, so a description does not change shape
  *  when you click into it: the read view renders these elements through
- *  react-markdown, the editor renders them through ProseMirror, and the
- *  arbitrary variants below reach the same tags in both. */
-export const markdownContentClass =
-  "space-y-2 text-sm leading-relaxed text-ink [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-surface-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px] [&_li]:ml-4 [&_li]:list-disc [&_p]:break-words [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-surface-2 [&_pre]:p-2";
+ *  react-markdown, the editor renders them through ProseMirror, and the rules
+ *  live in one place in index.css. */
+export const markdownContentClass = "issue-markdown";
 
 /** Module scope on purpose. This object is the element type react-markdown
  *  renders for each tag, so a fresh literal per render is a new component type,

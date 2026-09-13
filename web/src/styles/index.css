@@ -221,6 +221,31 @@ select {
 .report-markdown pre { max-width: 100%; overflow: auto; border-radius: 10px; background: oklch(var(--surface)); padding: 16px; font-family: theme(fontFamily.mono); font-size: 12px; line-height: 1.65; }
 .report-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
 .report-markdown th, .report-markdown td { border-bottom: 1px solid oklch(var(--border)); padding: 8px 12px; text-align: left; }
+
+/* The issue description, on both sides of the field: react-markdown renders the
+   read view, ProseMirror renders the editor, and both carry this class. Tailwind
+   Preflight flattens headings to body text, so "# 12" and "## 12" looked exactly
+   alike -- the markdown was being converted, it just had nothing to show for it. */
+.issue-markdown { color: oklch(var(--ink)); font-size: 14px; line-height: 1.7; overflow-wrap: break-word; }
+.issue-markdown > * + * { margin-top: .7em; }
+.issue-markdown h1, .issue-markdown h2, .issue-markdown h3 { font-weight: 650; line-height: 1.3; text-wrap: balance; }
+.issue-markdown h1 { font-size: 21px; } .issue-markdown h2 { font-size: 17px; } .issue-markdown h3 { font-size: 15px; }
+.issue-markdown ul { list-style: disc; } .issue-markdown ol { list-style: decimal; }
+.issue-markdown ul, .issue-markdown ol { padding-left: 1.4em; }
+.issue-markdown li + li { margin-top: .2em; }
+.issue-markdown blockquote { border-left: 2px solid oklch(var(--border)); padding-left: 12px; color: oklch(var(--muted)); }
+.issue-markdown hr { border: 0; border-top: 1px solid oklch(var(--border)); }
+.issue-markdown a { color: oklch(var(--primary)); text-decoration: underline; text-underline-offset: 3px; }
+.issue-markdown :not(pre) > code { border-radius: 4px; background: oklch(var(--surface-2)); padding: 2px 5px; font-family: theme(fontFamily.mono); font-size: .9em; }
+.issue-markdown pre { max-width: 100%; overflow: auto; border-radius: 8px; background: oklch(var(--surface-2)); padding: 12px; font-family: theme(fontFamily.mono); font-size: 12px; line-height: 1.65; }
+.issue-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.issue-markdown th, .issue-markdown td { border: 1px solid oklch(var(--border)); padding: 6px 10px; text-align: left; }
+/* An image is pasted at whatever size it was captured; the cap keeps a screenshot
+   from pushing the rest of the description off the screen. */
+.issue-markdown img { max-height: 20rem; border: 1px solid oklch(var(--border)); border-radius: 6px; }
+/* GFM task lists (read view) render a checkbox inside the item. */
+.issue-markdown li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2em; }
+.issue-markdown input[type="checkbox"] { margin-right: 6px; }
 .mermaid-figure { position: relative; margin: 16px 0; border: 1px solid oklch(var(--border)); border-radius: 10px; background: oklch(var(--surface)); }
 .mermaid-diagram { overflow-x: auto; padding: 16px 46px 16px 16px; }
 .mermaid-diagram svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
