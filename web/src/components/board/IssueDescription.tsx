@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { ImagePlus, Loader2 } from "lucide-react";
@@ -13,32 +13,67 @@ import { cn } from "../../lib/utils";
  *  attachments take the authenticated path; anything else stays a plain image. */
 const ATTACHMENT_SRC = /^\/api\/v1\/attachments\/\d+$/;
 
+/** Object URLs, held for the session instead of for one mount.
+ *
+ *  The field swaps between rendered markdown and a textarea, so a per-mount
+ *  object URL meant every click into the description threw its images away and
+ *  downloaded them back: the spinner, the layout jump and the image again, on
+ *  every entry. The bytes never change once stored, so one object URL per
+ *  attachment is both correct and what stops the description from blinking.
+ *  The cap keeps a long session from pinning every screenshot it ever showed. */
+const MAX_CACHED_ATTACHMENTS = 40;
+const attachmentURLs = new Map<string, string>();
+const attachmentRequests = new Map<string, Promise<string>>();
+
+function loadAttachmentURL(src: string, token?: string | null) {
+  const cached = attachmentURLs.get(src);
+  if (cached) return Promise.resolve(cached);
+  // A description with the same image twice, or a preview rendered beside the
+  // raw text, must not fetch the same bytes twice.
+  const inFlight = attachmentRequests.get(src);
+  if (inFlight) return inFlight;
+  const request = fetchAttachmentBlob(src, token).then((blob) => {
+    const url = URL.createObjectURL(blob);
+    attachmentURLs.set(src, url);
+    // A Map iterates in insertion order, so the first key is the oldest.
+    while (attachmentURLs.size > MAX_CACHED_ATTACHMENTS) {
+      const oldest = attachmentURLs.keys().next().value as string;
+      const evicted = attachmentURLs.get(oldest);
+      attachmentURLs.delete(oldest);
+      if (evicted) URL.revokeObjectURL(evicted);
+    }
+    return url;
+  });
+  attachmentRequests.set(src, request);
+  void request.catch(() => undefined).finally(() => attachmentRequests.delete(src));
+  return request;
+}
+
 /** An <img> for an attachment. The tag cannot send an Authorization header, so
  *  the bytes are fetched with one and handed over as an object URL. */
 function AttachmentImage({ src, alt }: { src: string; alt?: string }) {
   const token = useAuthStore((state) => state.token);
-  const [objectURL, setObjectURL] = useState<string>();
+  // Seeded from the cache so a remount paints the image instead of the spinner.
+  const [objectURL, setObjectURL] = useState<string | undefined>(() => attachmentURLs.get(src));
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    let revoked = false;
-    let created: string | undefined;
+    let cancelled = false;
+    const cached = attachmentURLs.get(src);
+    if (cached) {
+      setObjectURL(cached);
+      return;
+    }
     setFailed(false);
-    setObjectURL(undefined);
-    fetchAttachmentBlob(src, token)
-      .then((blob) => {
-        if (revoked) return;
-        created = URL.createObjectURL(blob);
-        setObjectURL(created);
+    loadAttachmentURL(src, token)
+      .then((url) => {
+        if (!cancelled) setObjectURL(url);
       })
       .catch(() => {
-        if (!revoked) setFailed(true);
+        if (!cancelled) setFailed(true);
       });
     return () => {
-      revoked = true;
-      // Object URLs pin the blob in memory until they are revoked, and a board
-      // full of screenshots would otherwise leak one per render.
-      if (created) URL.revokeObjectURL(created);
+      cancelled = true;
     };
   }, [src, token]);
 
@@ -56,35 +91,41 @@ function AttachmentImage({ src, alt }: { src: string; alt?: string }) {
   return <img src={objectURL} alt={alt ?? ""} className="max-h-80 rounded-md border border-border" loading="lazy" />;
 }
 
+/** Module scope on purpose. This object is the element type react-markdown
+ *  renders for each tag, so a fresh literal per render is a new component type,
+ *  which remounts every image it holds -- and a remount is another fetch and
+ *  another flash. The live preview re-renders on every keystroke, so getting
+ *  this wrong would download the images once per key. */
+const markdownComponents: Components = {
+  img: ({ src, alt }) =>
+    typeof src === "string" && ATTACHMENT_SRC.test(src) ? (
+      <AttachmentImage src={src} alt={alt} />
+    ) : (
+      <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} className="max-h-80 rounded-md border border-border" />
+    ),
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noreferrer noopener">
+      {children}
+    </a>
+  )
+};
+
 export function IssueMarkdown({ text }: { text: string }) {
   return (
     <div className="space-y-2 text-sm leading-relaxed text-ink [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-surface-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[13px] [&_li]:ml-4 [&_li]:list-disc [&_p]:break-words [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-surface-2 [&_pre]:p-2">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeSanitize]}
-        components={{
-          img: ({ src, alt }) =>
-            typeof src === "string" && ATTACHMENT_SRC.test(src) ? (
-              <AttachmentImage src={src} alt={alt} />
-            ) : (
-              <img src={typeof src === "string" ? src : undefined} alt={alt ?? ""} className="max-h-80 rounded-md border border-border" />
-            ),
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer noopener">
-              {children}
-            </a>
-          )
-        }}
-      >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]} components={markdownComponents}>
         {text}
       </ReactMarkdown>
     </div>
   );
 }
 
-/** The description field: rendered markdown until you click into it, a textarea
- *  once you do. Pasting or dropping an image uploads it and writes the markdown
- *  at the cursor, which is the whole point of the field carrying images. */
+/** The description field: rendered markdown until you click into it, then a
+ *  textarea with the rendered result live underneath it -- writing markdown
+ *  against its own output is the only way to place an image or a table without
+ *  saving to check. Pasting or dropping an image uploads it and writes the
+ *  markdown at the cursor, which is the whole point of the field carrying
+ *  images. */
 export function IssueDescriptionField({
   value,
   onChange,
@@ -113,6 +154,11 @@ export function IssueDescriptionField({
   const [error, setError] = useState<string>();
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Whether the click that is about to blur the textarea landed inside this
+  // field. The preview is pointer-interactive, and a click on plain rendered
+  // text moves focus nowhere at all, so relatedTarget alone cannot tell
+  // "clicked my own preview" from "clicked the page".
+  const pointerInside = useRef(false);
 
   function insertAtCursor(snippet: string) {
     const area = areaRef.current;
@@ -153,35 +199,57 @@ export function IssueDescriptionField({
   return (
     <div className={cn(grow && "flex min-h-0 flex-1 flex-col")}>
       {editing ? (
-        <Textarea
-          ref={areaRef}
-          className={cn(
-            "mt-1 min-h-28",
-            bare && "min-h-20 resize-none rounded-none border-0 bg-transparent px-0 py-0 focus:border-0 focus:ring-0",
-            grow && "scrollbar-subtle min-h-0 flex-1"
-          )}
-          value={value}
-          placeholder={placeholder}
-          autoFocus={!bare && value.trim() !== ""}
-          onChange={(event) => onChange(event.target.value)}
-          onBlur={() => {
-            if (!startEditing && value.trim() !== "") setEditing(false);
+        <div
+          className={cn("flex min-h-0 flex-col", grow && "flex-1")}
+          onPointerDown={() => {
+            pointerInside.current = true;
           }}
-          onPaste={(event) => {
-            const files = Array.from(event.clipboardData?.files ?? []);
-            if (files.some((file) => file.type.startsWith("image/"))) {
-              event.preventDefault();
-              void upload(files);
-            }
+          onBlur={(event) => {
+            const inside = pointerInside.current || event.currentTarget.contains(event.relatedTarget as Node | null);
+            pointerInside.current = false;
+            if (!inside && !startEditing && value.trim() !== "") setEditing(false);
           }}
-          onDrop={(event) => {
-            const files = Array.from(event.dataTransfer?.files ?? []);
-            if (files.some((file) => file.type.startsWith("image/"))) {
-              event.preventDefault();
-              void upload(files);
-            }
-          }}
-        />
+        >
+          <Textarea
+            ref={areaRef}
+            className={cn(
+              "mt-1 min-h-28",
+              bare && "min-h-20 resize-none rounded-none border-0 bg-transparent px-0 py-0 focus:border-0 focus:ring-0",
+              // The editor keeps the larger share: the preview is for checking
+              // what was written, the textarea is where the writing happens.
+              grow && "scrollbar-subtle min-h-0 flex-[3]"
+            )}
+            value={value}
+            placeholder={placeholder}
+            autoFocus={!bare && value.trim() !== ""}
+            onChange={(event) => onChange(event.target.value)}
+            onPaste={(event) => {
+              const files = Array.from(event.clipboardData?.files ?? []);
+              if (files.some((file) => file.type.startsWith("image/"))) {
+                event.preventDefault();
+                void upload(files);
+              }
+            }}
+            onDrop={(event) => {
+              const files = Array.from(event.dataTransfer?.files ?? []);
+              if (files.some((file) => file.type.startsWith("image/"))) {
+                event.preventDefault();
+                void upload(files);
+              }
+            }}
+          />
+          {value.trim() ? (
+            <div
+              className={cn(
+                "mt-2 rounded-md border border-border/60 bg-surface-2/20 p-2",
+                grow ? "scrollbar-subtle min-h-0 flex-[2] overflow-y-auto" : "max-h-72 overflow-y-auto"
+              )}
+            >
+              <span className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted">Preview</span>
+              <IssueMarkdown text={value} />
+            </div>
+          ) : null}
+        </div>
       ) : (
         <button
           type="button"
