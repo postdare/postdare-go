@@ -1,12 +1,28 @@
-import { useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Code2, ImagePlus, Loader2, Pilcrow } from "lucide-react";
 
 import { uploadAttachment } from "../../api/postdareGo";
 import { Textarea } from "../ui/textarea";
 import { useAuthStore } from "../../store/auth";
 import { IssueMarkdown } from "./IssueMarkdown";
-import { IssueMarkdownEditor } from "./IssueMarkdownEditor";
 import { cn } from "../../lib/utils";
+
+/** The editor is a ProseMirror stack, and most pages never open a description:
+ *  it is fetched when a description field appears rather than with the app. */
+const IssueMarkdownEditor = lazy(() =>
+  import("./IssueMarkdownEditor").then((module) => ({ default: module.IssueMarkdownEditor }))
+);
+
+/** Holds the editor's height while its chunk arrives, so opening a description
+ *  does not shift the page under the pointer. */
+function EditorLoading({ fill }: { fill: boolean }) {
+  return (
+    <div
+      className={cn("mt-1 min-h-28 animate-pulse rounded-md bg-surface-2/40", fill && "min-h-0 flex-1")}
+      aria-hidden
+    />
+  );
+}
 
 /** The description field: rendered markdown until you click into it, then an
  *  editor that renders what you type as you type it. A pasted or dropped
@@ -49,6 +65,14 @@ export function IssueDescriptionField({
   // on a button of our own, or the file dialog taking focus, leaves a blur with
   // no relatedTarget to inspect, and neither should collapse the field.
   const pointerInside = useRef(false);
+
+  // Clicking a description to edit it is the expected next move on this screen,
+  // so the chunk is fetched while the description is still being read.
+  useEffect(() => {
+    if (editing) return;
+    const timer = window.setTimeout(() => void import("./IssueMarkdownEditor"), 1200);
+    return () => window.clearTimeout(timer);
+  }, [editing]);
 
   async function upload(files: File[]) {
     const images = files.filter((file) => file.type.startsWith("image/"));
@@ -96,13 +120,15 @@ export function IssueDescriptionField({
           <div
             className={cn("mt-1 rounded-md", bare ? "px-0 py-1" : "border border-border bg-surface-2/20 px-3 py-2", grow && "flex min-h-0 flex-1 flex-col")}
           >
-            <IssueMarkdownEditor
-              value={value}
-              onChange={onChange}
-              placeholder={placeholder}
-              autoFocus={!bare && value.trim() !== ""}
-              fill={grow}
-            />
+            <Suspense fallback={<EditorLoading fill={grow} />}>
+              <IssueMarkdownEditor
+                value={value}
+                onChange={onChange}
+                placeholder={placeholder}
+                autoFocus={!bare && value.trim() !== ""}
+                fill={grow}
+              />
+            </Suspense>
           </div>
         )
       ) : (
