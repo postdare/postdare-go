@@ -76,8 +76,17 @@ Both transports serve this list.
 | `postdare_go.analyze_failed_deploy` | Rule-based failure analysis |
 | `postdare_go.list_deploy_task_reports` | List the reports a deploy task captured |
 | `postdare_go.get_report` | Get one report with summary, issues and markdown |
+| `postdare_go.list_boards` | List issue boards with their project and column counts |
+| `postdare_go.get_board` | Get one board |
+| `postdare_go.list_board_issues` | List a board's issues, filterable by column, priority, assignee and text |
+| `postdare_go.get_issue` | Get one issue with its board key and linked deploy tasks |
+| `postdare_go.create_issue` | File an issue when mutation tools are enabled |
+| `postdare_go.update_issue` | Edit an issue when mutation tools are enabled |
+| `postdare_go.move_issue` | Move an issue to a column when mutation tools are enabled |
 
 Reports are the structured artifacts a deploy stage captures with `capture_as` (today `ai_review`). Both report tools are read-only and return the same payload as the REST endpoints, including each issue's `diff_hunk`, so an agent reads the reviewed code beside the finding. Sharing a report stays out of MCP: share links are created and revoked from the web UI only.
+
+Boards are the work side of the server. A board owns its issues, an issue lists the deploy tasks linked to it — drawn from commit messages or attached by hand — and a deploy that succeeds closes the issues whose commits asked for it. The four read tools return the same payloads as the REST endpoints. Uploading attachments, creating or deleting boards, deleting issues and editing deploy links stay out of MCP.
 
 Mutation tools are disabled by default:
 
@@ -86,14 +95,14 @@ mcp:
   allow_mutation_tools: false
 ```
 
-To allow deploy or rollback through MCP, set:
+To allow deploy, rollback or issue edits through MCP, set:
 
 ```yaml
 mcp:
   allow_mutation_tools: true
 ```
 
-The tool call must still pass:
+Every mutation tool call must still pass `confirm`:
 
 ```json
 {
@@ -101,6 +110,16 @@ The tool call must still pass:
   "confirm": true
 }
 ```
+
+```json
+{
+  "issue_id": 9,
+  "status": "done",
+  "confirm": true
+}
+```
+
+Read tools are not affected: with the flag off, `list_boards` and `get_issue` still answer, and only the write is refused (`MCP_MUTATION_DISABLED`).
 
 ## Resources
 
@@ -111,6 +130,10 @@ The tool call must still pass:
 - `postdare-go://projects/{project_id}/app-logs`
 - `postdare-go://deploy-tasks/{task_id}/reports`
 - `postdare-go://reports/{report_id}`
+- `postdare-go://boards`
+- `postdare-go://boards/{board_id}`
+- `postdare-go://boards/{board_id}/issues`
+- `postdare-go://issues/{issue_id}`
 
 ## Prompts
 

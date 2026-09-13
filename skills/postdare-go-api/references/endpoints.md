@@ -5,6 +5,7 @@
 - [信封与分页](#信封与分页)
 - [鉴权](#鉴权)
 - [路由表](#路由表)
+- [看板与 issue](#看板与-issue)
 - [项目对象](#项目对象)
 - [deploy_stages 结构](#deploy_stages-结构)
 - [错误码](#错误码)
@@ -42,7 +43,7 @@ Authorization: Bearer <token>
 
 两种 token 走同一个中间件，先比对 MCP token（constant-time），不匹配再按 JWT 解析：
 
-- **MCP token** —— `mcp.api_token`。仅当 `mcp.enabled: true` 时被接受。actor = `mcp`，触发部署/回滚受 `mcp.allow_mutation_tools` 与请求体 `confirm: true` 双重限制。
+- **MCP token** —— `mcp.api_token`。仅当 `mcp.enabled: true` 时被接受。actor = `mcp`，触发部署/回滚**以及 issue 的增改移动**受 `mcp.allow_mutation_tools` 与请求体 `confirm: true` 双重限制（读接口不受限）。
 - **用户 JWT** —— `POST /auth/login` 换取，有效期 `jwt.expire_hours`（默认 72h）。actor = `user`，不受 mutation 闸门限制。
 
 SSE 的 `/stream` 路由允许把 token 放在 `?access_token=`，因为浏览器 `EventSource` 不能设置请求头。
@@ -120,6 +121,35 @@ DELETE 在项目还有 `pending`/`running` 任务时返回 `409`；物理的部�
 
 原始 token 不入库：由每份报告的随机 salt 加 `jwt.secret` 派生，所以拿到数据库副本也复原不出可用链接；反过来，轮换 `jwt.secret` 会让所有旧链接失效。
 
+### 看板与 issue
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/boards` | 全部看板，含 `project_name` 与 `issue_counts`；**不分页，整块返回** |
+| POST | `/boards` | `{name, key, description, project_id}`，`201` |
+| GET | `/boards/{id}` | 详情 |
+| PATCH | `/boards/{id}` | 白名单：`name`、`description`、`project_id`、`clear_project`；**`key` 创建后不可改** |
+| DELETE | `/boards/{id}` | `204`；看板下还有 issue 时 `409 BOARD_HAS_ISSUES` |
+| GET | `/boards/{id}/issues` | 过滤 `status`、`priority`、`assignee_id`（`none` = 未分配）、`q`（标题+描述模糊）；**不分页** |
+| POST | `/boards/{id}/issues` | 创建 issue，`201` |
+| GET | `/boards/{id}/labels` | 该看板 issue 已用过的去重标签 |
+| GET | `/boards/{id}/stream` | SSE，issue 变更时推一行 |
+| GET | `/issues/meta` | 服务端接受的 `statuses` 与 `priorities` |
+| GET | `/issues/{id}` | 详情，含 `identifier`、`board_key`、`deploy_links` |
+| PATCH | `/issues/{id}` | 只写请求体里出现的字段 |
+| DELETE | `/issues/{id}` | `204` |
+| POST | `/issues/{id}/move` | `{status, after_id, before_id}` |
+| POST | `/issues/{id}/deploy-links` | `{task_id}` 手工关联部署任务，`201` |
+| DELETE | `/issues/{id}/deploy-links/{task_id}` | `204` |
+
+### 附件与用户
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/attachments` | `multipart/form-data`，文件字段名 `file`，`201` 返回 `{id, filename, content_type, size, url}` |
+| GET | `/attachments/{id}` | 返回图片字节，带 `nosniff` 与长缓存 |
+| GET | `/users` | `{id, username, role}` 列表，供指派选择器用 |
+
 ### 其他
 
 | 方法 | 路径 | 说明 |
@@ -130,6 +160,55 @@ DELETE 在项目还有 `pending`/`running` 任务时返回 `409`；物理的部�
 | GET | `/dashboard/recent-deploy-tasks` | `?limit=` 默认 10，上限 50 |
 | GET | `/settings` | 运行时配置快照（token 脱敏）+ 自定义元数据 |
 | PATCH | `/settings` | 仅自由元数据，值必须是字符串 |
+
+## 看板与 issue
+
+看板（board）是“工作流”，项目（project）是“可发布的服务”，`board.project_id` 是两者之间可选的桥。看板与 issue 都是**整块返回、不分页**：看板视图必须把每张卡片都摆到列里，翻页会把列摆错。
+
+创建看板：
+
+```json
+{"name": "Engineering", "key": "ENG", "description": "可选", "project_id": 1}
+```
+
+`key` 为 2-10 位、首字符是字母，创建后**不可修改**：它已经烧进 `ENG-42` 这种 issue 标识里，而 commit message 里写的正是这个标识。
+
+创建 issue：
+
+```json
+{
+  "title": "部署日志尾巴是空的",
+  "description": "Markdown，可内嵌上传的图片",
+  "status": "todo",
+  "priority": "high",
+  "assignee_id": 1,
+  "labels": ["bug"]
+}
+```
+
+`status` ∈ {`backlog`,`todo`,`in_progress`,`done`,`canceled`}；`priority` ∈ {`urgent`,`high`,`medium`,`low`,`none`}。创建或移动进 `done`/`canceled` 时自动写 `completed_at`。
+
+`PATCH /issues/{id}` 只写请求体里**出现过的**字段（`title`、`description`、`status`、`priority`、`assignee_id`、`clear_assignee`、`labels`），没出现的字段保持原值——所以想清空 description 要显式传 `""`，想取消指派要传 `clear_assignee: true`（传 `assignee_id: null` 不生效）。改 `status` 会走 move 路径，让卡片在新列里拿到合法的排序 key。
+
+`POST /issues/{id}/move` 传的是**落点的两个邻居**而不是下标：
+
+```json
+{"status": "in_progress", "after_id": 12, "before_id": 0}
+```
+
+这样即使看板在拖拽期间被别人改过，落点仍会解析成用户瞄准的那个位置；`0` 表示那一侧没有邻居。
+
+`deploy_links` 记录 issue 与部署任务的关联：
+
+```json
+{"task_id": 42, "project_id": 1, "project_name": "my-app", "status": "success",
+ "branch": "main", "commit_id": "abc123", "closing": false, "source": "manual",
+ "finished_at": "...", "created_at": "..."}
+```
+
+`POST /issues/{id}/deploy-links` 是手工补一个 commit message 没写到的关联，`source: "manual"`，**不会**自己关闭 issue。从 commit message 自动画出来的关联是 `source: "auto"`，消息里带关闭关键字（如 `fix ENG-42`）时为 `closing: true`；只有这类关联会在部署成功后关闭 issue。删除项目会删掉指向其任务的关联，issue 本身保留。
+
+附件是粘贴到 issue 描述里的图片。上传时 issue 还不存在，所以上传是独立的，直到某个已保存的描述引用了它的 `url` 才被绑定；24 小时仍未被引用的上传会被清理。上限 10 MiB，只收 `image/png`、`image/jpeg`、`image/gif`、`image/webp`——**SVG 被拒**，因为它能在本域执行脚本。落盘类型以嗅探结果为准（不信客户端声明），文件名由服务端生成，下载响应带 `X-Content-Type-Options: nosniff` 与 `Content-Security-Policy: default-src 'none'; sandbox`。
 
 ## 项目对象
 
@@ -180,7 +259,7 @@ DELETE 在项目还有 `pending`/`running` 任务时返回 `409`；物理的部�
 | --- | --- | --- |
 | `UNAUTHORIZED` | 401 | 缺失或非法 bearer；JWT 过期后重新登录 |
 | `PASSWORD_CHANGE_REQUIRED` | 403 | 先改密码 |
-| `MCP_MUTATION_DISABLED` | 403 | MCP token 触发部署被闸门挡下 |
+| `MCP_MUTATION_DISABLED` | 403 | MCP token 的写操作被闸门挡下（部署/回滚/issue 增改移动） |
 | `CONFIRM_REQUIRED` | 422 | MCP token 的写操作请求体缺 `confirm: true` |
 | `MCP_TOKEN_REQUIRED` | 403 | `/mcp` 端点不收用户 JWT |
 | `PROJECT_NOT_FOUND` | 404 | id 不存在 |
@@ -194,6 +273,23 @@ DELETE 在项目还有 `pending`/`running` 任务时返回 `409`；物理的部�
 | `APP_LOG_NOT_FOUND` / `LOG_NOT_FOUND` | 404 | 路径越界、文件不存在或无读权限 |
 | `SETTING_READ_ONLY` | 422 | 该配置项只能改 config.yaml 并重启 |
 | `REPORT_NOT_FOUND` | 404 | 报告不存在，或分享 token 不匹配 |
+| `BOARD_NOT_FOUND` | 404 | 看板 id 不存在 |
+| `BOARD_NAME_REQUIRED` | 422 | `name` 为空 |
+| `BOARD_KEY_INVALID` | 422 | `key` 不是 2-10 位、字母开头 |
+| `BOARD_KEY_TAKEN` | 409 | `key` 已被占用 |
+| `BOARD_HAS_ISSUES` | 409 | 看板下还有 issue，先删或移走 |
+| `ISSUE_NOT_FOUND` | 404 | issue id 不存在 |
+| `ISSUE_TITLE_REQUIRED` | 422 | `title` 为空 |
+| `ISSUE_STATUS_INVALID` | 422 | `status` 不在允许集合里，`details.allowed` 给了全集 |
+| `ISSUE_PRIORITY_INVALID` | 422 | `priority` 不在允许集合里 |
+| `PROJECT_NOT_FOUND` | 422 | 看板关联的 `project_id` 不存在（与项目接口的 404 不同） |
+| `ASSIGNEE_NOT_FOUND` | 422 | `assignee_id` 对应用户不存在 |
+| `DEPLOY_TASK_NOT_FOUND` | 404 | 要关联的 `task_id` 不存在 |
+| `ATTACHMENT_MISSING` | 400 | 没带 `file` 字段 |
+| `ATTACHMENT_TYPE_UNSUPPORTED` | 415 | 不是 png/jpeg/gif/webp（含 SVG） |
+| `ATTACHMENT_EMPTY` | 422 | 文件是空的 |
+| `ATTACHMENT_TOO_LARGE` | 413 | 超过 10 MiB |
+| `ATTACHMENT_NOT_FOUND` | 404 | 附件不存在，或文件已被清理 |
 
 ## curl 速查
 
@@ -212,6 +308,20 @@ curl -s -X POST $BASE/api/v1/projects/1/deploy-tasks \
 
 # SSE 跟部署日志（token 走 query，因为 EventSource 不能带 header）
 curl -N "$BASE/api/v1/deploy-tasks/1/logs/stream?access_token=$TOKEN"
+
+# 看板与 issue（看板可以用 id 或 key）
+curl -s $BASE/api/v1/boards -H "Authorization: Bearer $TOKEN"
+curl -s -X POST $BASE/api/v1/boards/1/issues \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"title":"部署日志尾巴是空的","priority":"high"}'
+curl -s "$BASE/api/v1/boards/1/issues?status=todo&q=日志" -H "Authorization: Bearer $TOKEN"
+curl -s -X POST $BASE/api/v1/issues/1/move \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"status":"done"}'
+
+# 上传一张粘进描述的图
+curl -s -X POST $BASE/api/v1/attachments \
+  -H "Authorization: Bearer $TOKEN" -F file=@screenshot.png
 ```
 
 MCP 的 Streamable HTTP 端点不在 `/api/v1` 之下，且只认 MCP token：

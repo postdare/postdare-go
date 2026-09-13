@@ -35,6 +35,11 @@ from datetime import datetime, timezone
 DEFAULT_BASE_URL = "http://127.0.0.1:8088"
 API_PREFIX = "/api/v1"
 TERMINAL_STATUSES = {"success", "failed", "canceled", "rollbacked"}
+ISSUE_STATUSES = {"backlog", "todo", "in_progress", "done", "canceled"}
+ISSUE_PRIORITIES = {"urgent", "high", "medium", "low", "none"}
+# Mirrors service.MaxAttachmentBytes: the server also cuts the request body off
+# at this size, so checking here turns it into a sentence instead of a 413.
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
 
 class ApiError(Exception):
@@ -241,6 +246,59 @@ class Client:
 
     # -- helpers ---------------------------------------------------------- #
 
+    def upload(self, path, file_path, field="file"):
+        """POST one file as multipart/form-data.
+
+        urllib has no multipart encoder. The images this endpoint takes are few
+        and small, so the body is assembled here rather than adding a dependency
+        to a script that has to run on a bare host.
+        """
+        size = os.path.getsize(file_path)
+        if size > MAX_ATTACHMENT_BYTES:
+            raise SystemExit(
+                f"{file_path} is {size} bytes; the server accepts at most "
+                f"{MAX_ATTACHMENT_BYTES} (10 MiB)"
+            )
+        with open(file_path, "rb") as handle:
+            content = handle.read()
+        boundary = "----postdare" + hashlib.sha256(os.urandom(16)).hexdigest()[:24]
+        filename = os.path.basename(file_path)
+        body = b"".join([
+            f"--{boundary}\r\n".encode(),
+            f'Content-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'.encode(),
+            # The server sniffs the bytes and ignores this, so it says nothing
+            # about what the file is allowed to be.
+            b"Content-Type: application/octet-stream\r\n\r\n",
+            content,
+            f"\r\n--{boundary}--\r\n".encode(),
+        ])
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Authorization": "Bearer " + self.token(),
+        }
+        req = urllib.request.Request(self.base_url + API_PREFIX + path, data=body,
+                                     headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as err:
+            raise _api_error(err) from None
+        except urllib.error.URLError as err:
+            raise SystemExit(f"cannot reach {self.base_url}: {err.reason}") from None
+
+    def download(self, path):
+        """Fetch a binary response, returning its headers and bytes."""
+        req = urllib.request.Request(self.base_url + API_PREFIX + path,
+                                     headers={"Authorization": "Bearer " + self.token()})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                return resp.headers, resp.read()
+        except urllib.error.HTTPError as err:
+            raise _api_error(err) from None
+        except urllib.error.URLError as err:
+            raise SystemExit(f"cannot reach {self.base_url}: {err.reason}") from None
+
     def paged(self, path, params=None, fetch_all=False):
         params = dict(params or {})
         first = self.request("GET", path, params=params)
@@ -270,6 +328,15 @@ class Client:
             if project.get("project_key") == ref:
                 return project["id"]
         raise SystemExit(f"no project with project_key={ref!r}")
+
+    def resolve_board(self, ref):
+        """Accept a numeric id or a board key, the prefix issues are named with."""
+        if str(ref).isdigit():
+            return int(ref)
+        for board in self.request("GET", "/boards").get("data") or []:
+            if str(board.get("key", "")).upper() == str(ref).upper():
+                return board["id"]
+        raise SystemExit(f"no board with key={ref!r}")
 
 
 def _api_error(err):
@@ -315,13 +382,23 @@ def emit(payload, args):
         print(json.dumps(data, indent=2, ensure_ascii=False))
 
 
+# Table columns per command. A group names its own columns, and an action that
+# lists a different resource overrides it under "<command>.<action>" -- the
+# issue list is reached through the boards group, but its rows are issues.
+_COLUMNS = {
+    "projects": ["id", "project_key", "name", "git_provider", "branch", "auto_deploy_enabled"],
+    "tasks": ["id", "project_id", "status", "trigger_type", "branch", "commit_id", "created_at"],
+    "webhook-events": ["id", "provider", "project_key", "branch", "handled", "ignored_reason", "created_at"],
+    "reports": ["id", "type", "task_id", "status", "conclusion", "share_enabled"],
+    "boards": ["id", "key", "name", "project_id", "issue_counts"],
+    "boards.issues": ["id", "identifier", "title", "status", "priority", "assignee_id", "updated_at"],
+    "users": ["id", "username", "role"],
+}
+
+
 def _columns_for(args):
-    return {
-        "projects": ["id", "project_key", "name", "git_provider", "branch", "auto_deploy_enabled"],
-        "tasks": ["id", "project_id", "status", "trigger_type", "branch", "commit_id", "created_at"],
-        "webhook-events": ["id", "provider", "project_key", "branch", "handled", "ignored_reason", "created_at"],
-        "reports": ["id", "type", "task_id", "status", "conclusion", "share_enabled"],
-    }.get(args.command)
+    action = getattr(args, "action", None)
+    return _COLUMNS.get(f"{args.command}.{action}") or _COLUMNS.get(args.command)
 
 
 def _table(rows, columns=None):
@@ -519,6 +596,100 @@ def cmd_reports(client, args):
         emit(client.request("DELETE", f"/reports/{args.report_id}/share"), args)
 
 
+def cmd_boards(client, args):
+    if args.action == "list":
+        # Boards come back whole, not paged: a kanban view has to place every card.
+        emit(client.paged("/boards", {"page": args.page, "page_size": args.page_size}, fetch_all=args.all), args)
+    elif args.action == "get":
+        emit(client.request("GET", f"/boards/{client.resolve_board(args.board)}"), args)
+    elif args.action == "create":
+        require_yes(args, "create a board")
+        emit(client.request("POST", "/boards", body=load_json_arg(args.data)), args)
+    elif args.action == "update":
+        require_yes(args, "update a board")
+        emit(client.request("PATCH", f"/boards/{client.resolve_board(args.board)}",
+                            body=load_json_arg(args.data)), args)
+    elif args.action == "delete":
+        require_yes(args, "delete a board")
+        board_id = client.resolve_board(args.board)
+        board = client.request("GET", f"/boards/{board_id}")["data"]
+        # A board is only deletable while it is empty, so the worst a mistyped
+        # key can do here is fail; naming the key still makes the id unambiguous.
+        if args.confirm_key.upper() != board["key"].upper():
+            raise SystemExit(
+                f"pass --confirm-key {board['key']} to delete this board "
+                "(it must have no issues left)"
+            )
+        emit(client.request("DELETE", f"/boards/{board_id}"), args)
+    elif args.action == "labels":
+        emit(client.request("GET", f"/boards/{client.resolve_board(args.board)}/labels"), args)
+    else:
+        emit(client.request("GET", f"/boards/{client.resolve_board(args.board)}/issues",
+                            {"status": args.status, "priority": args.priority,
+                             "assignee_id": args.assignee, "q": args.query}), args)
+
+
+def cmd_issues(client, args):
+    if args.action == "meta":
+        emit(client.request("GET", "/issues/meta"), args)
+    elif args.action == "get":
+        emit(client.request("GET", f"/issues/{args.issue_id}"), args)
+    elif args.action == "create":
+        require_yes(args, "create an issue")
+        # confirm is ignored for a JWT and required for the MCP token, so sending
+        # it always keeps one command working under both credentials.
+        body = dict(load_json_arg(args.data), confirm=True)
+        emit(client.request("POST", f"/boards/{client.resolve_board(args.board)}/issues", body=body), args)
+    elif args.action == "update":
+        require_yes(args, "update an issue")
+        body = dict(load_json_arg(args.data), confirm=True)
+        emit(client.request("PATCH", f"/issues/{args.issue_id}", body=body), args)
+    elif args.action == "move":
+        require_yes(args, "move an issue")
+        # Neighbours rather than an index: the server resolves the drop against
+        # the board as it is now, not as the caller last saw it.
+        body = {"status": args.status, "after_id": args.after, "before_id": args.before, "confirm": True}
+        emit(client.request("POST", f"/issues/{args.issue_id}/move",
+                            body={k: v for k, v in body.items() if v is not None}), args)
+    elif args.action == "delete":
+        require_yes(args, "delete an issue")
+        emit(client.request("DELETE", f"/issues/{args.issue_id}"), args)
+    elif args.action == "link":
+        require_yes(args, "link a deploy task")
+        emit(client.request("POST", f"/issues/{args.issue_id}/deploy-links",
+                            body={"task_id": args.task_id}), args)
+    else:
+        require_yes(args, "unlink a deploy task")
+        emit(client.request("DELETE", f"/issues/{args.issue_id}/deploy-links/{args.task_id}"), args)
+
+
+def cmd_attachments(client, args):
+    if args.action == "upload":
+        # Images are pasted before the issue exists, so an upload is not yet a
+        # write to anything anyone can see -- but it does create a row, and the
+        # rule here is that every state-changing command says --yes.
+        require_yes(args, "upload an attachment")
+        emit(client.upload("/attachments", args.path), args)
+        return
+    headers, data = client.download(f"/attachments/{args.attachment_id}")
+    destination = args.output or _attachment_filename(headers) or f"attachment-{args.attachment_id}"
+    with open(destination, "wb") as handle:
+        handle.write(data)
+    print(destination)
+
+
+def _attachment_filename(headers):
+    disposition = headers.get("Content-Disposition", "")
+    marker = 'filename="'
+    if marker in disposition:
+        return disposition.split(marker, 1)[1].split('"', 1)[0]
+    return ""
+
+
+def cmd_users(client, args):
+    emit(client.request("GET", "/users"), args)
+
+
 def cmd_webhook_events(client, args):
     if args.action == "list":
         project_id = client.resolve_project(args.project) if args.project else None
@@ -658,6 +829,61 @@ def build_parser():
     leaf(reports_sub, "share", help="mint or rotate a public link; older links stop working").add_argument("report_id")
     leaf(reports_sub, "unshare").add_argument("report_id")
     reports.set_defaults(func=cmd_reports)
+
+    boards, boards_sub = group("boards", help="issue boards: the work side, next to deploy projects")
+    b_list = leaf(boards_sub, "list", help="every board with its project and column counts")
+    paging(b_list)
+    leaf(boards_sub, "get", help="one board").add_argument("board", help="id or board key, e.g. ENG")
+    leaf(boards_sub, "create", help="file a new board").add_argument("data", help='JSON object, e.g. \'{"name":"Engineering","key":"ENG"}\'')
+    b_update = leaf(boards_sub, "update", help="the key is immutable once issues reference it")
+    b_update.add_argument("board", help="id or board key")
+    b_update.add_argument("data", help="JSON object or @file.json; fields: name, description, project_id, clear_project")
+    b_delete = leaf(boards_sub, "delete", help="delete a board that has no issues left")
+    b_delete.add_argument("board", help="id or board key")
+    b_delete.add_argument("--confirm-key", required=True, help="repeat the board key to confirm")
+    leaf(boards_sub, "labels", help="labels the board's issues already use").add_argument("board")
+    b_issues = leaf(boards_sub, "issues", help="list the board's issues in column order")
+    b_issues.add_argument("board", help="id or board key")
+    b_issues.add_argument("--status", choices=sorted(ISSUE_STATUSES))
+    b_issues.add_argument("--priority", choices=sorted(ISSUE_PRIORITIES))
+    b_issues.add_argument("--assignee", help="user id, or 'none' for unassigned")
+    b_issues.add_argument("--q", dest="query", help="case-insensitive match on title and description")
+    boards.set_defaults(func=cmd_boards)
+
+    issues, issues_sub = group("issues", help="issue cards on a board")
+    leaf(issues_sub, "meta", help="the statuses and priorities the server accepts")
+    leaf(issues_sub, "get", help="one issue with its deploy links").add_argument("issue_id")
+    i_create = leaf(issues_sub, "create", help="file a new issue")
+    i_create.add_argument("board", help="id or board key")
+    i_create.add_argument("data", help='JSON object, e.g. \'{"title":"fix deploy log tail","priority":"high"}\'')
+    i_update = leaf(issues_sub, "update", help="only the fields in the body are written")
+    i_update.add_argument("issue_id")
+    i_update.add_argument("data", help="JSON object of the fields to change, or @file.json")
+    i_move = leaf(issues_sub, "move", help="drop the card into a column")
+    i_move.add_argument("issue_id")
+    i_move.add_argument("--status", required=True, choices=sorted(ISSUE_STATUSES))
+    i_move.add_argument("--after", type=int, help="id of the card it should follow")
+    i_move.add_argument("--before", type=int, help="id of the card it should precede")
+    leaf(issues_sub, "delete", help="delete an issue").add_argument("issue_id")
+    i_link = leaf(issues_sub, "link", help="attach a deploy task the commit message did not name")
+    i_link.add_argument("issue_id")
+    i_link.add_argument("task_id", type=int)
+    i_unlink = leaf(issues_sub, "unlink", help="drop a deploy task link")
+    i_unlink.add_argument("issue_id")
+    i_unlink.add_argument("task_id", type=int)
+    issues.set_defaults(func=cmd_issues)
+
+    attachments, attachments_sub = group("attachments", help="images embedded in issue descriptions")
+    attachments_sub.add_parser("upload", parents=[common],
+                               help="upload one image (png/jpeg/gif/webp, max 10 MiB)").add_argument(
+        "path", help="local image file")
+    a_get = attachments_sub.add_parser("get", parents=[common], help="download an uploaded image")
+    a_get.add_argument("attachment_id")
+    a_get.add_argument("--output", help="file to write (default: the name it was uploaded with)")
+    attachments.set_defaults(func=cmd_attachments)
+
+    sub.add_parser("users", parents=[common],
+                   help="list users for the assignee picker").set_defaults(func=cmd_users)
 
     events, events_sub = group("webhook-events", help="inspect webhook deliveries and why they were ignored")
     e_list = leaf(events_sub, "list")
