@@ -134,8 +134,19 @@ export function getIssue(id: string | number, token?: string | null) {
   return apiRequest<DataResponse<Issue>>(`/api/v1/issues/${id}`, {}, token);
 }
 
-export function updateIssue(id: string | number, payload: Record<string, unknown>, token?: string | null) {
-  return apiRequest<DataResponse<Issue>>(`/api/v1/issues/${id}`, { method: "PATCH", body: JSON.stringify(payload) }, token);
+/** `init` carries the odd request-level flag the autosave needs -- keepalive,
+ *  so an edit sent as the page closes is not cancelled with the document. */
+export function updateIssue(
+  id: string | number,
+  payload: Record<string, unknown>,
+  token?: string | null,
+  init: RequestInit = {}
+) {
+  return apiRequest<DataResponse<Issue>>(
+    `/api/v1/issues/${id}`,
+    { ...init, method: "PATCH", body: JSON.stringify(payload) },
+    token
+  );
 }
 
 export function deleteIssue(id: string | number, token?: string | null) {
