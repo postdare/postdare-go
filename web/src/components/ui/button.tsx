@@ -28,6 +28,12 @@ const buttonVariants = cva(
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
-export function Button({ className, variant, size, ...props }: ButtonProps) {
-  return <button className={cn(buttonVariants({ variant, size, className }))} {...props} />;
-}
+/** Forwards its ref so Radix can use a Button as its own trigger: `asChild`
+ *  hands the child the ref it anchors a menu or dialog to, and a plain function
+ *  component silently drops it, leaving a trigger that never opens. */
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { className, variant, size, ...props },
+  ref
+) {
+  return <button ref={ref} className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+});
