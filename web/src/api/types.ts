@@ -187,21 +187,6 @@ export interface Board {
   updated_at?: string;
 }
 
-/** A release that carried this issue. `closing` marks a commit that asked for
- *  the issue to be finished, which is what lets a successful deploy close it. */
-export interface IssueDeployLink {
-  task_id: number;
-  project_id: number;
-  project_name?: string;
-  status: DeployStatus;
-  branch?: string;
-  commit_id?: string;
-  closing: boolean;
-  source: "auto" | "manual";
-  finished_at?: string | null;
-  created_at: string;
-}
-
 export interface Issue {
   id: number;
   board_id: number;
@@ -219,7 +204,6 @@ export interface Issue {
   creator_name?: string;
   labels: string[];
   position: string;
-  deploy_links: IssueDeployLink[];
   completed_at?: string | null;
   created_at?: string;
   updated_at?: string;

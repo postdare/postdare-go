@@ -27,7 +27,7 @@ func setupMCPRouter(t *testing.T, mutate func(*config.Config)) *gin.Engine {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.Project{}, &model.DeployTask{}, &model.DeployTaskStage{}, &model.Report{}, &model.Setting{}, &model.User{}, &model.WebhookEvent{}, &model.Board{}, &model.Issue{}, &model.IssueDeployLink{}, &model.Attachment{}); err != nil {
+	if err := database.AutoMigrate(&model.Project{}, &model.DeployTask{}, &model.DeployTaskStage{}, &model.Report{}, &model.Setting{}, &model.User{}, &model.WebhookEvent{}, &model.Board{}, &model.Issue{}, &model.Attachment{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := database.Create(&model.Project{Name: "demo", ProjectKey: "demo", GitProvider: "gitee", Branch: "main"}).Error; err != nil {

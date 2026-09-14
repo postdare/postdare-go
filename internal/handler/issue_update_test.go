@@ -24,7 +24,7 @@ func setupIssueUpdateTest(t *testing.T) (*gorm.DB, *gin.Engine) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.Board{}, &model.Issue{}, &model.IssueDeployLink{}, &model.User{}, &model.Attachment{}, &model.DeployTask{}, &model.Project{}); err != nil {
+	if err := database.AutoMigrate(&model.Board{}, &model.Issue{}, &model.User{}, &model.Attachment{}, &model.DeployTask{}, &model.Project{}); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{}

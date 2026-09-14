@@ -125,8 +125,6 @@ Project deletion is destructive for database records: it removes the project, re
 | PATCH | `/api/v1/issues/{issue_id}` | Update issue |
 | DELETE | `/api/v1/issues/{issue_id}` | Delete issue |
 | POST | `/api/v1/issues/{issue_id}/move` | Move the issue to a column and position |
-| POST | `/api/v1/issues/{issue_id}/deploy-links` | Link a deploy task by hand |
-| DELETE | `/api/v1/issues/{issue_id}/deploy-links/{task_id}` | Unlink a deploy task |
 
 A board is a stream of work and a project is a deployable service; a board's `project_id` is the optional bridge between the two. Boards and issues are returned whole rather than paged, because a kanban view has to place every card.
 
@@ -171,14 +169,6 @@ Statuses are `backlog`, `todo`, `in_progress`, `done` and `canceled`; priorities
 ```
 
 Neighbours rather than an index, so a board that changed underneath the client still resolves the drop to the slot the user aimed at. `0` means there is no neighbour on that side.
-
-`POST /issues/{issue_id}/deploy-links` attaches a release by hand for the case the commit message did not name the issue:
-
-```json
-{ "task_id": 42 }
-```
-
-A manual link never closes the issue on its own. Links drawn from a commit message are stored with `source: "auto"`, and with `closing: true` when the message used a closing keyword; only those move an issue, and only once the deploy succeeds. Deleting a project removes the links to its deploy tasks and keeps the issues.
 
 `DELETE /api/v1/boards/{board_id}` returns `409 Conflict` with `BOARD_HAS_ISSUES` while the board still has issues, so a board cannot silently discard work.
 

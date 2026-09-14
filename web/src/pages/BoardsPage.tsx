@@ -66,7 +66,7 @@ export function BoardsPage() {
     <>
       <PageHeader
         title="Boards"
-        description="Issues grouped into boards. A commit that says fix ENG-42 closes the issue when its deploy succeeds."
+        description="Issues grouped into boards. A board is a stream of work; a project is a deployable service."
         actions={
           <Button variant="primary" size="sm" onClick={() => setCreating((open) => !open)}>
             <Plus className="h-3.5 w-3.5" />

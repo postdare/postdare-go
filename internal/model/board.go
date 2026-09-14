@@ -19,13 +19,6 @@ const (
 	IssuePriorityHigh   = "high"
 	IssuePriorityMedium = "medium"
 	IssuePriorityLow    = "low"
-
-	// IssueLinkAuto marks a link the webhook drew from a commit message;
-	// IssueLinkManual marks one a person attached from the issue page. The
-	// distinction matters because only an auto link carries a closing keyword,
-	// and only a closing link may move an issue on its own.
-	IssueLinkAuto   = "auto"
-	IssueLinkManual = "manual"
 )
 
 // boardKeyPattern is what makes an identifier like ENG-42 unambiguous in a
@@ -123,20 +116,6 @@ func (i Issue) Identifier(boardKey string) string {
 		return fmt.Sprintf("#%d", i.Number)
 	}
 	return fmt.Sprintf("%s-%d", boardKey, i.Number)
-}
-
-// IssueDeployLink ties an issue to the deploy task that shipped it. Closing
-// records whether the commit asked for the issue to be finished ("fix ENG-42")
-// or merely mentioned it ("see ENG-42"); only the former closes the issue when
-// the deploy succeeds.
-type IssueDeployLink struct {
-	ID        uint64    `gorm:"primaryKey" json:"id"`
-	IssueID   uint64    `gorm:"not null;uniqueIndex:idx_issue_links_issue_task,priority:1" json:"issue_id"`
-	TaskID    uint64    `gorm:"not null;uniqueIndex:idx_issue_links_issue_task,priority:2;index:idx_issue_links_task_id" json:"task_id"`
-	CommitID  string    `gorm:"size:100" json:"commit_id"`
-	Closing   bool      `gorm:"not null;default:false" json:"closing"`
-	Source    string    `gorm:"size:20;not null;default:auto" json:"source"`
-	CreatedAt time.Time `json:"created_at"`
 }
 
 // AttachmentContentTypes are the image types an issue may carry, keyed by the

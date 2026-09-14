@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GitBranch, Rocket } from "lucide-react";
+import { GitBranch } from "lucide-react";
 
 import type { Issue } from "../../api/types";
 import { cn } from "../../lib/utils";
@@ -24,27 +24,6 @@ function PriorityMark({ priority }: { priority: Issue["priority"] }) {
           style={{ height }}
         />
       ))}
-    </span>
-  );
-}
-
-/** The release strip: whether this issue has shipped, and how it went. It is the
- *  reason this board lives next to the deploy console rather than in Linear. */
-function DeployMark({ issue }: { issue: Issue }) {
-  const link = issue.deploy_links[0];
-  if (!link) return null;
-  const tone =
-    link.status === "success"
-      ? "text-success"
-      : link.status === "failed"
-        ? "text-danger"
-        : link.status === "running" || link.status === "pending"
-          ? "text-info"
-          : "text-muted";
-  return (
-    <span className={cn("inline-flex items-center gap-1", tone)} title={`Deploy #${link.task_id} — ${link.status}`}>
-      <Rocket className="h-3 w-3" aria-hidden />
-      <span className="text-[11px] font-medium">{link.status}</span>
     </span>
   );
 }
@@ -85,7 +64,6 @@ export function IssueCardBody({ issue, dragging }: { issue: Issue; dragging?: bo
             <span className="text-muted">Unassigned</span>
           )}
         </span>
-        <DeployMark issue={issue} />
       </div>
     </div>
   );

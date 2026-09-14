@@ -151,18 +151,6 @@ export function moveIssue(
   return apiRequest<DataResponse<Issue>>(`/api/v1/issues/${id}/move`, { method: "POST", body: JSON.stringify(payload) }, token);
 }
 
-export function linkIssueDeployTask(id: string | number, taskID: number, token?: string | null) {
-  return apiRequest<DataResponse<Issue>>(
-    `/api/v1/issues/${id}/deploy-links`,
-    { method: "POST", body: JSON.stringify({ task_id: taskID }) },
-    token
-  );
-}
-
-export function unlinkIssueDeployTask(id: string | number, taskID: number, token?: string | null) {
-  return apiRequest<void>(`/api/v1/issues/${id}/deploy-links/${taskID}`, { method: "DELETE" }, token);
-}
-
 export function listBoardUsers(token?: string | null) {
   return apiRequest<DataResponse<BoardUser[]>>("/api/v1/users", {}, token);
 }

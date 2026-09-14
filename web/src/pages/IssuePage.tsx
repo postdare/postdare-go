@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Copy, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Trash2 } from "lucide-react";
 
 import { createIssue, deleteIssue, getBoard, getIssue, listBoardLabels, listBoardUsers, updateIssue } from "../api/postdareGo";
 import type { Issue, IssuePriority, IssueStatus } from "../api/types";
@@ -10,11 +10,10 @@ import { isIssueStatus } from "../components/board/boardMeta";
 import { AssigneePicker, PriorityPicker, StatusPicker } from "../components/board/IssueProperties";
 import { LabelsEditor } from "../components/board/LabelsEditor";
 import { PageHeader } from "../components/PageHeader";
-import { Badge, statusTone } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
-import { formatDate, shortCommit } from "../lib/utils";
+import { formatDate } from "../lib/utils";
 import { useAuthStore } from "../store/auth";
 
 interface IssueDraft {
@@ -116,7 +115,6 @@ function IssueForm({
 
   const [draft, setDraft] = useState<IssueDraft>(() => draftFrom(loaded, fallbackStatus));
   const [labels, setLabels] = useState<string[]>(() => loaded?.labels ?? []);
-  const [copied, setCopied] = useState(false);
 
   const save = useMutation({
     mutationFn: () => {
@@ -153,16 +151,6 @@ function IssueForm({
 
   const backTo = `/boards/${loaded?.board_id ?? boardID}`;
   const identifier = loaded?.identifier ?? `${boardKey ?? ""}-…`;
-
-  async function copyReference() {
-    if (!loaded) return;
-    try {
-      await navigator.clipboard.writeText(`fix ${loaded.identifier}`);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  }
 
   return (
     <>
@@ -267,41 +255,6 @@ function IssueForm({
             </CardContent>
           </Card>
 
-          {!isNew && loaded ? (
-            <Card>
-              <CardContent className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-ink">Releases</span>
-                  <Button variant="ghost" size="sm" className="h-7" onClick={copyReference}>
-                    <Copy className="h-3 w-3" />
-                    {copied ? "Copied" : `fix ${loaded.identifier}`}
-                  </Button>
-                </div>
-                <p className="text-[11px] text-muted">
-                  Put <span className="font-mono">fix {loaded.identifier}</span> in a commit message and the deploy it lands
-                  in closes this issue.
-                </p>
-                {loaded.deploy_links.length > 0 ? (
-                  <ul className="space-y-1.5 pt-1">
-                    {loaded.deploy_links.map((link) => (
-                      <li key={link.task_id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                        <Link to={`/deploy-tasks/${link.task_id}`} className="font-medium text-primary hover:underline">
-                          #{link.task_id}
-                        </Link>
-                        <Badge tone={statusTone(link.status)}>{link.status}</Badge>
-                        <span className="text-muted">{link.project_name ?? `Project ${link.project_id}`}</span>
-                        {link.commit_id ? <span className="font-mono text-muted">{shortCommit(link.commit_id)}</span> : null}
-                        {link.closing ? <span className="text-muted">· closes</span> : null}
-                        {link.source === "manual" ? <span className="text-muted">· linked by hand</span> : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-muted">No release has carried this issue yet.</p>
-                )}
-              </CardContent>
-            </Card>
-          ) : null}
         </div>
       </div>
     </>

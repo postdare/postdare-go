@@ -74,8 +74,6 @@ func RegisterRoutes(r *gin.Engine, h *Handler) {
 	secured.PATCH("/issues/:issue_id", h.UpdateIssue)
 	secured.DELETE("/issues/:issue_id", h.DeleteIssue)
 	secured.POST("/issues/:issue_id/move", h.MoveIssue)
-	secured.POST("/issues/:issue_id/deploy-links", h.LinkIssueDeployTask)
-	secured.DELETE("/issues/:issue_id/deploy-links/:task_id", h.UnlinkIssueDeployTask)
 	secured.GET("/users", h.ListBoardUsers)
 	secured.POST("/attachments", h.UploadAttachment)
 	secured.GET("/attachments/:attachment_id", h.GetAttachment)

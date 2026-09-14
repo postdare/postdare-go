@@ -5,13 +5,12 @@ import (
 	"testing"
 
 	"github.com/hellodeveye/postdare-go/internal/model"
-	"github.com/hellodeveye/postdare-go/internal/webhook"
 )
 
 func newBoardService(t *testing.T) *Service {
 	t.Helper()
 	svc := newTestService(t)
-	if err := svc.DB.AutoMigrate(&model.Board{}, &model.Issue{}, &model.IssueDeployLink{}, &model.User{}); err != nil {
+	if err := svc.DB.AutoMigrate(&model.Board{}, &model.Issue{}, &model.User{}); err != nil {
 		t.Fatal(err)
 	}
 	return svc
@@ -237,88 +236,6 @@ func TestMoveIssueRecoversFromUnusablePositions(t *testing.T) {
 	}
 }
 
-func TestLinkIssuesFromEventDrawsLinks(t *testing.T) {
-	svc := newBoardService(t)
-	board := newBoard(t, svc, "ENG")
-	fixed := newIssue(t, svc, board.ID, "fixed", model.IssueInProgress)
-	mentioned := newIssue(t, svc, board.ID, "mentioned", model.IssueTodo)
-
-	event := &webhook.Event{Commits: []webhook.Commit{
-		{ID: "c1", Message: "fixes ENG-" + itoa(fixed.Number)},
-		{ID: "c2", Message: "see ENG-" + itoa(mentioned.Number)},
-		{ID: "c3", Message: "touches NOPE-1"},
-	}}
-	svc.LinkIssuesFromEvent(context.Background(), 77, event)
-
-	var links []model.IssueDeployLink
-	if err := svc.DB.Where("task_id = ?", 77).Order("issue_id asc").Find(&links).Error; err != nil {
-		t.Fatal(err)
-	}
-	if len(links) != 2 {
-		t.Fatalf("expected 2 links, got %#v", links)
-	}
-	if !links[0].Closing || links[0].CommitID != "c1" {
-		t.Fatalf("expected the closing link to carry its commit, got %#v", links[0])
-	}
-	if links[1].Closing {
-		t.Fatalf("expected a bare mention not to close, got %#v", links[1])
-	}
-	for _, link := range links {
-		if link.Source != model.IssueLinkAuto {
-			t.Fatalf("expected an auto link, got %#v", link)
-		}
-	}
-}
-
-// Providers redeliver webhooks; a redelivery must not stack duplicate links.
-func TestLinkIssuesFromEventIsIdempotent(t *testing.T) {
-	svc := newBoardService(t)
-	board := newBoard(t, svc, "ENG")
-	issue := newIssue(t, svc, board.ID, "fixed", model.IssueInProgress)
-	event := &webhook.Event{Commits: []webhook.Commit{{ID: "c1", Message: "fixes ENG-" + itoa(issue.Number)}}}
-
-	svc.LinkIssuesFromEvent(context.Background(), 5, event)
-	svc.LinkIssuesFromEvent(context.Background(), 5, event)
-
-	var count int64
-	if err := svc.DB.Model(&model.IssueDeployLink{}).Where("task_id = ?", 5).Count(&count).Error; err != nil {
-		t.Fatal(err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 link after a redelivery, got %d", count)
-	}
-}
-
-func TestCloseIssuesForTask(t *testing.T) {
-	svc := newBoardService(t)
-	board := newBoard(t, svc, "ENG")
-	closing := newIssue(t, svc, board.ID, "closing", model.IssueInProgress)
-	mentioned := newIssue(t, svc, board.ID, "mentioned", model.IssueTodo)
-	already := newIssue(t, svc, board.ID, "already canceled", model.IssueCanceled)
-
-	links := []model.IssueDeployLink{
-		{IssueID: closing.ID, TaskID: 9, Closing: true, Source: model.IssueLinkAuto},
-		{IssueID: mentioned.ID, TaskID: 9, Closing: false, Source: model.IssueLinkAuto},
-		{IssueID: already.ID, TaskID: 9, Closing: true, Source: model.IssueLinkAuto},
-	}
-	if err := svc.DB.Create(&links).Error; err != nil {
-		t.Fatal(err)
-	}
-
-	svc.CloseIssuesForTask(context.Background(), 9)
-
-	if got := reloadIssue(t, svc, closing.ID); got.Status != model.IssueDone || got.CompletedAt == nil {
-		t.Fatalf("expected the closing issue to be done, got %#v", got)
-	}
-	if got := reloadIssue(t, svc, mentioned.ID); got.Status != model.IssueTodo {
-		t.Fatalf("expected a bare mention to be left alone, got %s", got.Status)
-	}
-	// An issue someone already canceled is not resurrected into Done.
-	if got := reloadIssue(t, svc, already.ID); got.Status != model.IssueCanceled {
-		t.Fatalf("expected a canceled issue to stay canceled, got %s", got.Status)
-	}
-}
-
 // reloadIssue reads an issue into a fresh struct: GORM treats a primary key
 // already set on the destination as an extra query condition, so reusing one
 // variable across reloads silently stops matching.
@@ -347,25 +264,6 @@ func TestDeleteBoardRefusesWhileIssuesRemain(t *testing.T) {
 	}
 	if err := svc.DeleteBoard(context.Background(), board.ID); err != ErrBoardNotFound {
 		t.Fatalf("expected ErrBoardNotFound, got %v", err)
-	}
-}
-
-func TestDeleteIssueRemovesItsDeployLinks(t *testing.T) {
-	svc := newBoardService(t)
-	board := newBoard(t, svc, "ENG")
-	issue := newIssue(t, svc, board.ID, "x", model.IssueTodo)
-	if err := svc.DB.Create(&model.IssueDeployLink{IssueID: issue.ID, TaskID: 3, Source: model.IssueLinkAuto}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.DeleteIssue(context.Background(), issue.ID); err != nil {
-		t.Fatal(err)
-	}
-	var count int64
-	if err := svc.DB.Model(&model.IssueDeployLink{}).Where("issue_id = ?", issue.ID).Count(&count).Error; err != nil {
-		t.Fatal(err)
-	}
-	if count != 0 {
-		t.Fatalf("expected the issue's links to be removed, got %d", count)
 	}
 }
 

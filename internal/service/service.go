@@ -82,11 +82,7 @@ func (s *Service) DeleteProject(ctx context.Context, projectID uint64) error {
 				return err
 			}
 			// The issues themselves outlive the project -- work is not undone by
-			// retiring the service that shipped it -- but a link to a deploy task
-			// that no longer exists would render as a dead row on the issue.
-			if err := tx.Where("task_id IN ?", taskIDs).Delete(&model.IssueDeployLink{}).Error; err != nil {
-				return err
-			}
+			// retiring the service that shipped it.
 			if err := tx.Where("task_id IN ?", taskIDs).Delete(&model.DeployTaskStage{}).Error; err != nil {
 				return err
 			}

@@ -132,7 +132,7 @@ func setupDeleteProjectTest(t *testing.T) (*gorm.DB, *gin.Engine) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := database.AutoMigrate(&model.Project{}, &model.DeployTask{}, &model.DeployTaskStage{}, &model.Report{}, &model.Board{}, &model.Issue{}, &model.IssueDeployLink{}); err != nil {
+	if err := database.AutoMigrate(&model.Project{}, &model.DeployTask{}, &model.DeployTaskStage{}, &model.Report{}, &model.Board{}, &model.Issue{}); err != nil {
 		t.Fatal(err)
 	}
 	// SQLite requires globally unique index names, so this test creates the

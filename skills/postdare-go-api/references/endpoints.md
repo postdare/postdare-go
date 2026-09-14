@@ -135,12 +135,10 @@ DELETE 在项目还有 `pending`/`running` 任务时返回 `409`；物理的部�
 | GET | `/boards/{id}/labels` | 该看板 issue 已用过的去重标签 |
 | GET | `/boards/{id}/stream` | SSE，issue 变更时推一行 |
 | GET | `/issues/meta` | 服务端接受的 `statuses` 与 `priorities` |
-| GET | `/issues/{id}` | 详情，含 `identifier`、`board_key`、`deploy_links` |
+| GET | `/issues/{id}` | 详情，含 `identifier`、`board_key` |
 | PATCH | `/issues/{id}` | 只写请求体里出现的字段 |
 | DELETE | `/issues/{id}` | `204` |
 | POST | `/issues/{id}/move` | `{status, after_id, before_id}` |
-| POST | `/issues/{id}/deploy-links` | `{task_id}` 手工关联部署任务，`201` |
-| DELETE | `/issues/{id}/deploy-links/{task_id}` | `204` |
 
 ### 附件与用户
 
@@ -197,16 +195,6 @@ DELETE 在项目还有 `pending`/`running` 任务时返回 `409`；物理的部�
 ```
 
 这样即使看板在拖拽期间被别人改过，落点仍会解析成用户瞄准的那个位置；`0` 表示那一侧没有邻居。
-
-`deploy_links` 记录 issue 与部署任务的关联：
-
-```json
-{"task_id": 42, "project_id": 1, "project_name": "my-app", "status": "success",
- "branch": "main", "commit_id": "abc123", "closing": false, "source": "manual",
- "finished_at": "...", "created_at": "..."}
-```
-
-`POST /issues/{id}/deploy-links` 是手工补一个 commit message 没写到的关联，`source: "manual"`，**不会**自己关闭 issue。从 commit message 自动画出来的关联是 `source: "auto"`，消息里带关闭关键字（如 `fix ENG-42`）时为 `closing: true`；只有这类关联会在部署成功后关闭 issue。删除项目会删掉指向其任务的关联，issue 本身保留。
 
 附件是粘贴到 issue 描述里的图片。上传时 issue 还不存在，所以上传是独立的，直到某个已保存的描述引用了它的 `url` 才被绑定；24 小时仍未被引用的上传会被清理。上限 10 MiB，只收 `image/png`、`image/jpeg`、`image/gif`、`image/webp`——**SVG 被拒**，因为它能在本域执行脚本。落盘类型以嗅探结果为准（不信客户端声明），文件名由服务端生成，下载响应带 `X-Content-Type-Options: nosniff` 与 `Content-Security-Policy: default-src 'none'; sandbox`。
 

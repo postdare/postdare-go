@@ -10,8 +10,6 @@ import (
 	"github.com/hellodeveye/postdare-go/internal/model"
 	"github.com/hellodeveye/postdare-go/internal/rank"
 	"github.com/hellodeveye/postdare-go/internal/sse"
-	"github.com/hellodeveye/postdare-go/internal/webhook"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -251,119 +249,21 @@ func (s *Service) DeleteBoard(ctx context.Context, boardID uint64) error {
 	})
 }
 
-// DeleteIssue removes an issue and the deploy links that pointed at it.
+// DeleteIssue removes an issue and the attachments hanging off it.
 func (s *Service) DeleteIssue(ctx context.Context, issueID uint64) error {
 	var issue model.Issue
-	if err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&issue, issueID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrIssueNotFound
-			}
-			return err
+	if err := s.DB.WithContext(ctx).First(&issue, issueID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrIssueNotFound
 		}
-		if err := tx.Where("issue_id = ?", issueID).Delete(&model.IssueDeployLink{}).Error; err != nil {
-			return err
-		}
-		return tx.Delete(&issue).Error
-	}); err != nil {
+		return err
+	}
+	if err := s.DB.WithContext(ctx).Delete(&issue).Error; err != nil {
 		return err
 	}
 	s.DeleteAttachmentsForIssue(ctx, issue.ID)
 	s.publishBoard(issue.BoardID, "issue.deleted", issue.ID)
 	return nil
-}
-
-// LinkIssuesFromEvent records the issues a push's commits referred to. It runs
-// when the deploy task is created so the link is visible while the deploy is
-// still running, not only once it finishes.
-func (s *Service) LinkIssuesFromEvent(ctx context.Context, taskID uint64, ev *webhook.Event) {
-	if ev == nil {
-		return
-	}
-	refs := ev.IssueRefs()
-	if len(refs) == 0 {
-		return
-	}
-	boards := map[string]uint64{}
-	touched := map[uint64]bool{}
-	for _, ref := range refs {
-		boardID, ok := boards[ref.BoardKey]
-		if !ok {
-			var board model.Board
-			// An identifier whose prefix is not a board is incidental text like
-			// "UTF-8", so it is dropped rather than reported.
-			if err := s.DB.WithContext(ctx).Select("id").Where("key = ?", ref.BoardKey).First(&board).Error; err != nil {
-				boards[ref.BoardKey] = 0
-				continue
-			}
-			boardID = board.ID
-			boards[ref.BoardKey] = boardID
-		}
-		if boardID == 0 {
-			continue
-		}
-		var issue model.Issue
-		if err := s.DB.WithContext(ctx).Select("id", "board_id").Where("board_id = ? AND number = ?", boardID, ref.Number).First(&issue).Error; err != nil {
-			continue
-		}
-		link := model.IssueDeployLink{
-			IssueID:  issue.ID,
-			TaskID:   taskID,
-			CommitID: ref.CommitID,
-			Closing:  ref.Closing,
-			Source:   model.IssueLinkAuto,
-		}
-		// A push that mentions the same issue twice, or a webhook redelivered by
-		// the provider, must not stack duplicate links.
-		if err := s.DB.WithContext(ctx).
-			Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "issue_id"}, {Name: "task_id"}}, DoNothing: true}).
-			Create(&link).Error; err != nil {
-			s.Logger.Warn("link issue to deploy task failed", zap.Uint64("issue_id", issue.ID), zap.Uint64("task_id", taskID), zap.Error(err))
-			continue
-		}
-		touched[issue.BoardID] = true
-	}
-	for boardID := range touched {
-		s.publishBoard(boardID, "issue.linked", taskID)
-	}
-}
-
-// CloseIssuesForTask moves to Done the issues whose commits asked to be closed
-// by this deploy. It runs only when the deploy actually succeeded: an issue is
-// finished when the fix is live, not when the commit was pushed. An issue that
-// someone has already closed or canceled is left alone.
-func (s *Service) CloseIssuesForTask(ctx context.Context, taskID uint64) {
-	var links []model.IssueDeployLink
-	if err := s.DB.WithContext(ctx).Where("task_id = ? AND closing = ?", taskID, true).Find(&links).Error; err != nil {
-		s.Logger.Warn("load closing issue links failed", zap.Uint64("task_id", taskID), zap.Error(err))
-		return
-	}
-	now := time.Now()
-	touched := map[uint64]bool{}
-	for _, link := range links {
-		var issue model.Issue
-		if err := s.DB.WithContext(ctx).First(&issue, link.IssueID).Error; err != nil {
-			continue
-		}
-		if model.IssueClosed(issue.Status) {
-			continue
-		}
-		err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			return tx.Model(&model.Issue{}).Where("id = ?", issue.ID).Updates(map[string]interface{}{
-				"status":       model.IssueDone,
-				"position":     topPosition(tx, issue.BoardID, model.IssueDone),
-				"completed_at": now,
-			}).Error
-		})
-		if err != nil {
-			s.Logger.Warn("close issue after deploy failed", zap.Uint64("issue_id", issue.ID), zap.Error(err))
-			continue
-		}
-		touched[issue.BoardID] = true
-	}
-	for boardID := range touched {
-		s.publishBoard(boardID, "issue.closed", taskID)
-	}
 }
 
 // publishBoard notifies open board views that something changed. The payload

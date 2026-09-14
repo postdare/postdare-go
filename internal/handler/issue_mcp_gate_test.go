@@ -34,7 +34,7 @@ func setupIssueMutationGate(t *testing.T, allowMutations bool) (*gorm.DB, *gin.E
 	if err := database.AutoMigrate(
 		&model.Board{},
 		&model.Issue{},
-		&model.IssueDeployLink{},
+
 		&model.Attachment{},
 		&model.User{},
 		&model.Project{},

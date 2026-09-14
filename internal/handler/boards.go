@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hellodeveye/postdare-go/internal/middleware"
@@ -22,26 +21,12 @@ type boardResponse struct {
 	IssueCounts map[string]int `json:"issue_counts"`
 }
 
-type issueDeployLinkResponse struct {
-	TaskID      uint64     `json:"task_id"`
-	ProjectID   uint64     `json:"project_id"`
-	ProjectName string     `json:"project_name,omitempty"`
-	Status      string     `json:"status"`
-	Branch      string     `json:"branch"`
-	CommitID    string     `json:"commit_id"`
-	Closing     bool       `json:"closing"`
-	Source      string     `json:"source"`
-	FinishedAt  *time.Time `json:"finished_at"`
-	CreatedAt   time.Time  `json:"created_at"`
-}
-
 type issueResponse struct {
 	model.Issue
-	Identifier   string                    `json:"identifier"`
-	BoardKey     string                    `json:"board_key"`
-	AssigneeName string                    `json:"assignee_name,omitempty"`
-	CreatorName  string                    `json:"creator_name,omitempty"`
-	DeployLinks  []issueDeployLinkResponse `json:"deploy_links"`
+	Identifier   string `json:"identifier"`
+	BoardKey     string `json:"board_key"`
+	AssigneeName string `json:"assignee_name,omitempty"`
+	CreatorName  string `json:"creator_name,omitempty"`
 }
 
 func (h *Handler) ListBoards(c *gin.Context) {
@@ -395,52 +380,6 @@ func (h *Handler) DeleteIssue(c *gin.Context) {
 	util.NoContent(c)
 }
 
-// LinkIssueDeployTask attaches a release to an issue by hand, for the case the
-// commit message did not name it. A manual link never closes the issue on its
-// own: if a person is attaching it after the fact, they can also move the card.
-func (h *Handler) LinkIssueDeployTask(c *gin.Context) {
-	issue, board, ok := h.loadIssue(c)
-	if !ok {
-		return
-	}
-	var payload struct {
-		TaskID uint64 `json:"task_id"`
-	}
-	if err := c.ShouldBindJSON(&payload); err != nil || payload.TaskID == 0 {
-		util.Error(c, http.StatusBadRequest, "INVALID_PAYLOAD", "task_id is required", nil)
-		return
-	}
-	var task model.DeployTask
-	if err := h.DB.First(&task, payload.TaskID).Error; err != nil {
-		util.Error(c, http.StatusNotFound, "DEPLOY_TASK_NOT_FOUND", "Deploy task not found", nil)
-		return
-	}
-	link := model.IssueDeployLink{IssueID: issue.ID, TaskID: task.ID, CommitID: task.CommitID, Source: model.IssueLinkManual}
-	if err := h.DB.Where("issue_id = ? AND task_id = ?", issue.ID, task.ID).FirstOrCreate(&link).Error; err != nil {
-		util.Error(c, http.StatusInternalServerError, "ISSUE_LINK_FAILED", "Failed to link deploy task", nil)
-		return
-	}
-	h.Service.PublishIssueChanged(board.ID, issue.ID)
-	util.Created(c, h.issueResponse(board, issue))
-}
-
-func (h *Handler) UnlinkIssueDeployTask(c *gin.Context) {
-	issue, board, ok := h.loadIssue(c)
-	if !ok {
-		return
-	}
-	taskID, ok := parseUintParam(c, "task_id")
-	if !ok {
-		return
-	}
-	if err := h.DB.Where("issue_id = ? AND task_id = ?", issue.ID, taskID).Delete(&model.IssueDeployLink{}).Error; err != nil {
-		util.Error(c, http.StatusInternalServerError, "ISSUE_UNLINK_FAILED", "Failed to unlink deploy task", nil)
-		return
-	}
-	h.Service.PublishIssueChanged(board.ID, issue.ID)
-	util.NoContent(c)
-}
-
 // StreamBoard pushes a line whenever an issue on the board changes, so a second
 // person's drag shows up without a refresh. Like the deploy log stream it
 // accepts ?access_token= because EventSource cannot set headers.
@@ -621,17 +560,16 @@ func (h *Handler) issueResponse(board model.Board, issue model.Issue) issueRespo
 	return h.issueResponses(board, []model.Issue{issue})[0]
 }
 
-// issueResponses resolves the names and deploy links for a whole column at once:
-// a board renders every card, so per-card lookups would be one query per card.
+// issueResponses resolves the assignee and creator names for a whole column at
+// once: a board renders every card, so per-card lookups would be one query per
+// card.
 func (h *Handler) issueResponses(board model.Board, issues []model.Issue) []issueResponse {
 	out := make([]issueResponse, 0, len(issues))
 	if len(issues) == 0 {
 		return out
 	}
-	issueIDs := make([]uint64, 0, len(issues))
 	userIDs := map[uint64]bool{}
 	for _, issue := range issues {
-		issueIDs = append(issueIDs, issue.ID)
 		if issue.AssigneeID != nil {
 			userIDs[*issue.AssigneeID] = true
 		}
@@ -640,19 +578,14 @@ func (h *Handler) issueResponses(board model.Board, issues []model.Issue) []issu
 		}
 	}
 	names := h.usernames(userIDs)
-	links := h.deployLinks(issueIDs)
 	for _, issue := range issues {
 		if issue.Labels == nil {
 			issue.Labels = []string{}
 		}
 		response := issueResponse{
-			Issue:       issue,
-			Identifier:  issue.Identifier(board.Key),
-			BoardKey:    board.Key,
-			DeployLinks: links[issue.ID],
-		}
-		if response.DeployLinks == nil {
-			response.DeployLinks = []issueDeployLinkResponse{}
+			Issue:      issue,
+			Identifier: issue.Identifier(board.Key),
+			BoardKey:   board.Key,
 		}
 		if issue.AssigneeID != nil {
 			response.AssigneeName = names[*issue.AssigneeID]
@@ -682,60 +615,6 @@ func (h *Handler) usernames(ids map[uint64]bool) map[uint64]string {
 		names[user.ID] = user.Username
 	}
 	return names
-}
-
-func (h *Handler) deployLinks(issueIDs []uint64) map[uint64][]issueDeployLinkResponse {
-	grouped := map[uint64][]issueDeployLinkResponse{}
-	var links []model.IssueDeployLink
-	if err := h.DB.Where("issue_id IN ?", issueIDs).Order("task_id desc").Find(&links).Error; err != nil || len(links) == 0 {
-		return grouped
-	}
-	taskIDs := make([]uint64, 0, len(links))
-	for _, link := range links {
-		taskIDs = append(taskIDs, link.TaskID)
-	}
-	var tasks []model.DeployTask
-	if err := h.DB.Select("id", "project_id", "status", "branch", "commit_id", "finished_at").Where("id IN ?", taskIDs).Find(&tasks).Error; err != nil {
-		return grouped
-	}
-	tasksByID := map[uint64]model.DeployTask{}
-	projectIDs := map[uint64]bool{}
-	for _, task := range tasks {
-		tasksByID[task.ID] = task
-		projectIDs[task.ProjectID] = true
-	}
-	projectNames := map[uint64]string{}
-	if len(projectIDs) > 0 {
-		list := make([]uint64, 0, len(projectIDs))
-		for id := range projectIDs {
-			list = append(list, id)
-		}
-		var projects []model.Project
-		if err := h.DB.Select("id", "name").Where("id IN ?", list).Find(&projects).Error; err == nil {
-			for _, project := range projects {
-				projectNames[project.ID] = project.Name
-			}
-		}
-	}
-	for _, link := range links {
-		task, ok := tasksByID[link.TaskID]
-		if !ok {
-			continue
-		}
-		grouped[link.IssueID] = append(grouped[link.IssueID], issueDeployLinkResponse{
-			TaskID:      link.TaskID,
-			ProjectID:   task.ProjectID,
-			ProjectName: projectNames[task.ProjectID],
-			Status:      task.Status,
-			Branch:      task.Branch,
-			CommitID:    link.CommitID,
-			Closing:     link.Closing,
-			Source:      link.Source,
-			FinishedAt:  task.FinishedAt,
-			CreatedAt:   link.CreatedAt,
-		})
-	}
-	return grouped
 }
 
 // normalizeLabels trims, de-duplicates and caps the label list so a card cannot
