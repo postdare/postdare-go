@@ -38,8 +38,11 @@ export function AppShell() {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  "flex h-9 items-center gap-2 rounded-md px-2.5 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-ink",
-                  isActive && "bg-surface-2 text-ink"
+                  "flex h-9 items-center gap-2 rounded-md px-2.5 text-sm transition-colors",
+                  // One colour utility per state rather than a base colour plus an
+                  // override: which of two same-specificity utilities wins is the
+                  // order they happen to have in the generated stylesheet.
+                  isActive ? "bg-surface-2 text-ink" : "text-ink/70 hover:bg-surface-2 hover:text-ink"
                 )
               }
             >
