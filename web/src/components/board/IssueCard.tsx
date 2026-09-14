@@ -4,26 +4,25 @@ import { GitBranch } from "lucide-react";
 
 import type { Issue } from "../../api/types";
 import { cn } from "../../lib/utils";
+import { IssueContextMenu } from "./IssueContextMenu";
 import { LabelChip } from "./LabelsEditor";
-import { PRIORITY_BARS, PRIORITY_LABELS, PRIORITY_TEXT } from "./boardMeta";
+import { PRIORITY_ICON, PRIORITY_LABELS, PRIORITY_TEXT } from "./boardMeta";
 
+/** The card's priority mark. An unset priority draws nothing: the card is not a
+ *  control, "no priority" is the default state of most cards, and a glyph for
+ *  every one of them would be noise on the board. The picker, which does have
+ *  to show the state it is in, carries a dash for that case. */
 function PriorityMark({ priority }: { priority: Issue["priority"] }) {
-  const filled = PRIORITY_BARS[priority] ?? 0;
+  const Icon = PRIORITY_ICON[priority];
+  if (priority === "none") return null;
   return (
     // `relative` is load-bearing: sr-only is position:absolute, and without a
     // positioned ancestor its containing block is the page itself, so the label
     // escapes the board's horizontal clip and gives the whole page a sideways
     // scrollbar on a phone.
-    <span className={cn("relative inline-flex items-end gap-[2px]", PRIORITY_TEXT[priority])} title={PRIORITY_LABELS[priority]}>
+    <span className={cn("relative inline-flex", PRIORITY_TEXT[priority])} title={PRIORITY_LABELS[priority]}>
       <span className="sr-only">{PRIORITY_LABELS[priority]}</span>
-      {[3, 6, 9].map((height, index) => (
-        <span
-          key={height}
-          aria-hidden
-          className={cn("w-[3px] rounded-[1px]", index < filled ? "bg-current" : "bg-current/25")}
-          style={{ height }}
-        />
-      ))}
+      <Icon className="h-3.5 w-3.5" aria-hidden />
     </span>
   );
 }
@@ -81,19 +80,23 @@ export function SortableIssueCard({ issue, onOpen }: { issue: Issue; onOpen: (is
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn("touch-none", isDragging && "opacity-40")}
     >
-      {/* The whole card is the drag handle and the open trigger: dnd-kit only
-          starts a drag past a small activation distance, so a plain click still
-          reads as a click. A button keeps it reachable from the keyboard. */}
-      <button
-        type="button"
-        className="block w-full rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/65"
-        onClick={() => onOpen(issue)}
-        aria-label={`${issue.identifier}: ${issue.title}`}
-        {...attributes}
-        {...listeners}
-      >
-        <IssueCardBody issue={issue} />
-      </button>
+      {/* The whole card is the drag handle, the open trigger and the
+          right-click target: dnd-kit only starts a drag past a small activation
+          distance and only on the primary button, so a plain click still reads
+          as a click and a right-click opens the copy menu instead. A button
+          keeps the card reachable from the keyboard. */}
+      <IssueContextMenu issue={issue}>
+        <button
+          type="button"
+          className="block w-full rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/65"
+          onClick={() => onOpen(issue)}
+          aria-label={`${issue.identifier}: ${issue.title}`}
+          {...attributes}
+          {...listeners}
+        >
+          <IssueCardBody issue={issue} />
+        </button>
+      </IssueContextMenu>
     </div>
   );
 }

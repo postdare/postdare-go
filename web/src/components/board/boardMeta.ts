@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, CircleDashed, CircleDot, XCircle, type LucideIcon } from "lucide-react";
+import { CheckCircle2, Circle, CircleDashed, CircleDot, Minus, Signal, SignalHigh, SignalLow, SignalMedium, XCircle, type LucideIcon } from "lucide-react";
 
 import type { IssuePriority, IssueStatus } from "../../api/types";
 
@@ -61,13 +61,17 @@ export const PRIORITY_TEXT: Record<IssuePriority, string> = {
   none: "text-muted"
 };
 
-/** Filled bars out of three, so priority is legible without relying on colour. */
-export const PRIORITY_BARS: Record<IssuePriority, number> = {
-  urgent: 3,
-  high: 3,
-  medium: 2,
-  low: 1,
-  none: 0
+/** The glyph a priority carries, from the same lucide family as every other
+ *  property icon, so priority reads as filled signal bars and never by colour
+ *  alone: urgent through low are one to four bars, and an unset priority is a
+ *  dash -- lucide's SignalZero is a single dot at the glyph's bottom corner,
+ *  which at 14px is the invisible slot this icon set replaced. */
+export const PRIORITY_ICON: Record<IssuePriority, LucideIcon> = {
+  urgent: Signal,
+  high: SignalHigh,
+  medium: SignalMedium,
+  low: SignalLow,
+  none: Minus
 };
 
 export function isIssueStatus(value: string): value is IssueStatus {

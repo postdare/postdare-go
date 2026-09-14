@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Activity, Boxes, GitBranch, KanbanSquare, LayoutDashboard, LogOut, Moon, Settings, Sun, Webhook } from "lucide-react";
 
 import { Button } from "../components/ui/button";
+import { Toaster } from "../components/ui/toast";
 import { cn } from "../lib/utils";
 import { useAuthStore } from "../store/auth";
 
@@ -75,6 +76,7 @@ export function AppShell() {
         <main className="mx-auto w-full min-h-0 max-w-[1680px] scrollbar-subtle flex-1 overflow-y-auto overflow-x-clip px-4 pt-5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:px-6 md:pb-5">
           <Outlet />
         </main>
+        <Toaster />
         <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
           {navItems.map((item) => (
             <NavLink

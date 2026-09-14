@@ -7,7 +7,7 @@ import { cn } from "../../lib/utils";
 import {
   ISSUE_PRIORITIES,
   ISSUE_STATUSES,
-  PRIORITY_BARS,
+  PRIORITY_ICON,
   PRIORITY_LABELS,
   PRIORITY_TEXT,
   STATUS_ICON,
@@ -33,21 +33,6 @@ const menuClass =
 
 const itemClass =
   "flex h-8 cursor-pointer select-none items-center gap-2 rounded px-2 text-sm text-ink outline-none data-[highlighted]:bg-surface-2";
-
-function PriorityBars({ priority }: { priority: IssuePriority }) {
-  const filled = PRIORITY_BARS[priority] ?? 0;
-  return (
-    <span className={cn("inline-flex items-end gap-[2px]", PRIORITY_TEXT[priority])} aria-hidden>
-      {[3, 6, 9].map((height, index) => (
-        <span
-          key={height}
-          className={cn("w-[3px] rounded-[1px]", index < filled ? "bg-current" : "bg-current/25")}
-          style={{ height }}
-        />
-      ))}
-    </span>
-  );
-}
 
 function Picker({
   layout,
@@ -116,24 +101,28 @@ export function PriorityPicker({
   onChange: (next: IssuePriority) => void;
   layout?: PropertyLayout;
 }) {
+  const Icon = PRIORITY_ICON[value];
   return (
     <Picker
       layout={layout}
       active={value !== "none"}
       trigger={
         <>
-          <PriorityBars priority={value} />
+          <Icon className={cn("h-3.5 w-3.5", PRIORITY_TEXT[value])} aria-hidden />
           <span>{value === "none" ? "Priority" : PRIORITY_LABELS[value]}</span>
         </>
       }
     >
-      {ISSUE_PRIORITIES.map((priority) => (
-        <DropdownMenu.Item key={priority} className={itemClass} onSelect={() => onChange(priority)}>
-          <PriorityBars priority={priority} />
-          <span className="flex-1">{PRIORITY_LABELS[priority]}</span>
-          {priority === value ? <Check className="h-3.5 w-3.5 text-muted" aria-hidden /> : null}
-        </DropdownMenu.Item>
-      ))}
+      {ISSUE_PRIORITIES.map((priority) => {
+        const PriorityIcon = PRIORITY_ICON[priority];
+        return (
+          <DropdownMenu.Item key={priority} className={itemClass} onSelect={() => onChange(priority)}>
+            <PriorityIcon className={cn("h-3.5 w-3.5", PRIORITY_TEXT[priority])} aria-hidden />
+            <span className="flex-1">{PRIORITY_LABELS[priority]}</span>
+            {priority === value ? <Check className="h-3.5 w-3.5 text-muted" aria-hidden /> : null}
+          </DropdownMenu.Item>
+        );
+      })}
     </Picker>
   );
 }
