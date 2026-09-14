@@ -19,6 +19,7 @@ import { ArrowLeft, Plus } from "lucide-react";
 import { getBoard, listBoardIssues, moveIssue } from "../api/postdareGo";
 import { streamURL } from "../api/client";
 import type { Issue, IssueStatus } from "../api/types";
+import { BoardMenu } from "../components/board/BoardMenu";
 import { IssueComposer } from "../components/board/IssueComposer";
 import { IssueDragPreview, SortableIssueCard } from "../components/board/IssueCard";
 import { ISSUE_STATUSES, STATUS_DOT, STATUS_LABELS, isIssueStatus } from "../components/board/boardMeta";
@@ -241,9 +242,17 @@ export function BoardPage() {
               <Plus className="h-3.5 w-3.5" />
               New issue
             </Button>
+            {boardData ? <BoardMenu board={boardData} /> : null}
           </>
         }
       />
+
+      {boardData?.archived_at ? (
+        <p className="mb-3 shrink-0 rounded-md border border-border bg-surface-2 px-3 py-2 text-xs text-muted">
+          This board is archived. It still works, and its issues keep their identifiers, but it no longer appears on
+          the boards index. Restore it from the board menu.
+        </p>
+      ) : null}
 
       <Link to="/boards" className="mb-3 inline-flex shrink-0 items-center gap-1 text-xs text-muted hover:text-ink">
         <ArrowLeft className="h-3 w-3" />

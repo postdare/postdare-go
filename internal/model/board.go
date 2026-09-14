@@ -77,14 +77,19 @@ func contains(values []string, value string) bool {
 // stages) and a Board is a stream of work, and the two are only sometimes the
 // same thing. ProjectID is the optional bridge between them.
 type Board struct {
-	ID          uint64    `gorm:"primaryKey" json:"id"`
-	Name        string    `gorm:"size:100;not null" json:"name"`
-	Key         string    `gorm:"size:10;uniqueIndex;not null" json:"key"`
-	Description string    `gorm:"type:text" json:"description"`
-	ProjectID   *uint64   `gorm:"index:idx_boards_project_id" json:"project_id"`
-	IssueSeq    uint64    `gorm:"not null;default:0" json:"-"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uint64  `gorm:"primaryKey" json:"id"`
+	Name        string  `gorm:"size:100;not null" json:"name"`
+	Key         string  `gorm:"size:10;uniqueIndex;not null" json:"key"`
+	Description string  `gorm:"type:text" json:"description"`
+	ProjectID   *uint64 `gorm:"index:idx_boards_project_id" json:"project_id"`
+	// ArchivedAt retires a board from the index without deleting it. Deleting is
+	// refused while issues remain, and rightly so: their identifiers are already
+	// in commit messages, so ENG-42 has to keep resolving long after nobody
+	// works on ENG again. Archiving is the ending a finished board actually has.
+	ArchivedAt *time.Time `gorm:"index:idx_boards_archived_at" json:"archived_at"`
+	IssueSeq   uint64     `gorm:"not null;default:0" json:"-"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 // Issue is one card on a board.

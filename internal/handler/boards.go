@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hellodeveye/postdare-go/internal/middleware"
@@ -32,9 +33,16 @@ type issueResponse struct {
 	CommentCount int `json:"comment_count"`
 }
 
+// ListBoards returns the boards still in use. Archived ones are withheld unless
+// asked for by name -- the index is a list of where work is happening, and a
+// board is archived precisely to stop it answering that question.
 func (h *Handler) ListBoards(c *gin.Context) {
+	query := h.DB.Where("archived_at IS NULL")
+	if archived := c.Query("archived"); archived == "true" || archived == "1" {
+		query = h.DB.Where("archived_at IS NOT NULL")
+	}
 	var boards []model.Board
-	if err := h.DB.Order("id asc").Find(&boards).Error; err != nil {
+	if err := query.Order("id asc").Find(&boards).Error; err != nil {
 		util.Error(c, http.StatusInternalServerError, "BOARD_LIST_FAILED", "Failed to list boards", nil)
 		return
 	}
@@ -95,6 +103,7 @@ func (h *Handler) UpdateBoard(c *gin.Context) {
 		Description  *string `json:"description"`
 		ProjectID    *uint64 `json:"project_id"`
 		ClearProject bool    `json:"clear_project"`
+		Archived     *bool   `json:"archived"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		util.Error(c, http.StatusBadRequest, "INVALID_PAYLOAD", "Invalid board payload", nil)
@@ -122,6 +131,17 @@ func (h *Handler) UpdateBoard(c *gin.Context) {
 			return
 		}
 		updates["project_id"] = *payload.ProjectID
+	}
+	// Archiving is idempotent on purpose: re-archiving an archived board keeps
+	// the date it was first retired rather than moving it to today.
+	if payload.Archived != nil {
+		switch {
+		case !*payload.Archived:
+			updates["archived_at"] = nil
+		case board.ArchivedAt == nil:
+			now := time.Now()
+			updates["archived_at"] = &now
+		}
 	}
 	if len(updates) > 0 {
 		if err := h.DB.Model(&board).Updates(updates).Error; err != nil {

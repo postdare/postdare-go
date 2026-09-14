@@ -102,8 +102,9 @@ export function getSettings(token?: string | null) {
   return apiRequest<DataResponse<Record<string, unknown>>>("/api/v1/settings", {}, token);
 }
 
-export function listBoards(token?: string | null) {
-  return apiRequest<DataResponse<Board[]>>("/api/v1/boards", {}, token);
+export function listBoards(token?: string | null, params: { archived?: boolean } = {}) {
+  const path = params.archived ? withQuery("/api/v1/boards", { archived: "true" }) : "/api/v1/boards";
+  return apiRequest<DataResponse<Board[]>>(path, {}, token);
 }
 
 export function getBoard(id: string | number, token?: string | null) {

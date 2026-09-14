@@ -10,6 +10,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
+import { cn } from "../lib/utils";
 import { useAuthStore } from "../store/auth";
 
 /** Derives ENG from "Engineering" so the key field is usually already right --
@@ -31,8 +32,12 @@ export function BoardsPage() {
   const [description, setDescription] = useState("");
   const [projectID, setProjectID] = useState<string>("");
   const [error, setError] = useState<string | undefined>();
+  const [showArchived, setShowArchived] = useState(false);
 
-  const boards = useQuery({ queryKey: ["boards"], queryFn: () => listBoards(token) });
+  const boards = useQuery({
+    queryKey: ["boards", showArchived ? "archived" : "active"],
+    queryFn: () => listBoards(token, { archived: showArchived })
+  });
   const projects = useQuery({ queryKey: ["projects"], queryFn: () => listProjects(token) });
 
   const create = useMutation({
@@ -67,10 +72,33 @@ export function BoardsPage() {
         title="Boards"
         description="Issues grouped into boards. A board is a stream of work; a project is a deployable service."
         actions={
-          <Button variant="primary" size="sm" onClick={() => setCreating((open) => !open)}>
-            <Plus className="h-3.5 w-3.5" />
-            New board
-          </Button>
+          <>
+            <div className="inline-flex rounded-md border border-border p-0.5" role="group" aria-label="Board view">
+              {[
+                { label: "Active", archived: false },
+                { label: "Archived", archived: true }
+              ].map((view) => (
+                <button
+                  key={view.label}
+                  type="button"
+                  aria-pressed={showArchived === view.archived}
+                  onClick={() => setShowArchived(view.archived)}
+                  className={cn(
+                    "h-8 rounded px-2.5 text-xs transition-colors",
+                    showArchived === view.archived ? "bg-surface-2 text-ink" : "text-muted hover:text-ink"
+                  )}
+                >
+                  {view.label}
+                </button>
+              ))}
+            </div>
+            {showArchived ? null : (
+              <Button variant="primary" size="sm" onClick={() => setCreating((open) => !open)}>
+                <Plus className="h-3.5 w-3.5" />
+                New board
+              </Button>
+            )}
+          </>
         }
       />
 
@@ -166,10 +194,11 @@ export function BoardsPage() {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
             <KanbanSquare className="h-6 w-6 text-muted" aria-hidden />
-            <p className="text-sm text-ink">No boards yet</p>
+            <p className="text-sm text-ink">{showArchived ? "No archived boards" : "No boards yet"}</p>
             <p className="max-w-sm text-xs text-muted">
-              A board holds issues and gives them identifiers like ENG-42, which a commit message can reference to close
-              them on deploy.
+              {showArchived
+                ? "Archiving retires a finished board from this list without deleting its issues, so the identifiers they were given still resolve."
+                : "A board holds issues and gives them identifiers like ENG-42, which a commit message can reference to close them on deploy."}
             </p>
           </CardContent>
         </Card>

@@ -182,6 +182,8 @@ export interface Board {
   description?: string;
   project_id?: number | null;
   project_name?: string;
+  /** Set once the board has been retired from the index; null while it is live. */
+  archived_at?: string | null;
   issue_counts: Record<IssueStatus, number>;
   created_at?: string;
   updated_at?: string;
