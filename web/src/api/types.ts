@@ -205,6 +205,22 @@ export interface Issue {
   labels: string[];
   position: string;
   completed_at?: string | null;
+  /** How many comments the issue's thread holds, so a card can show that a
+   *  conversation is happening on it without fetching the thread. */
+  comment_count?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface IssueComment {
+  id: number;
+  issue_id: number;
+  author_id?: number | null;
+  author_name?: string;
+  /** Markdown, in the same dialect the description uses. */
+  body: string;
+  /** The body was rewritten after it was posted. */
+  edited: boolean;
   created_at?: string;
   updated_at?: string;
 }

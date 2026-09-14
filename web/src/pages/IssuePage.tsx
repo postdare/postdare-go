@@ -5,6 +5,7 @@ import { ArrowLeft, Save, Trash2 } from "lucide-react";
 
 import { createIssue, deleteIssue, getBoard, getIssue, listBoardLabels, listBoardUsers, updateIssue } from "../api/postdareGo";
 import type { Issue, IssuePriority, IssueStatus } from "../api/types";
+import { IssueComments } from "../components/board/IssueComments";
 import { IssueDescriptionField } from "../components/board/IssueDescription";
 import { isIssueStatus } from "../components/board/boardMeta";
 import { AssigneePicker, PriorityPicker, StatusPicker } from "../components/board/IssueProperties";
@@ -223,6 +224,15 @@ function IssueForm({
             ) : null}
             {remove.error ? (
               <p className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{remove.error.message}</p>
+            ) : null}
+
+            {/* The thread lives under the description, inside the same card:
+                it is the rest of what is known about this issue, not a separate
+                panel. An unsaved issue has nothing to comment on yet. */}
+            {!isNew ? (
+              <div className="border-t border-border pt-4">
+                <IssueComments issueID={issueId} />
+              </div>
             ) : null}
           </CardContent>
         </Card>

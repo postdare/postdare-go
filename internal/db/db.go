@@ -57,6 +57,7 @@ func Open(cfg config.DatabaseConfig, opts ...Option) (*gorm.DB, error) {
 		&model.Report{},
 		&model.Board{},
 		&model.Issue{},
+		&model.IssueComment{},
 		&model.Attachment{},
 		&model.WebhookEvent{},
 		&model.Setting{},

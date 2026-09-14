@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GitBranch } from "lucide-react";
+import { GitBranch, MessageSquare } from "lucide-react";
 
 import type { Issue } from "../../api/types";
 import { cn } from "../../lib/utils";
@@ -63,6 +63,14 @@ export function IssueCardBody({ issue, dragging }: { issue: Issue; dragging?: bo
             <span className="text-muted">Unassigned</span>
           )}
         </span>
+        {issue.comment_count ? (
+          // A card says a conversation is happening on it, not what was said:
+          // the count is the part that is readable at board size.
+          <span className="inline-flex shrink-0 items-center gap-1" title={`${issue.comment_count} comments`}>
+            <MessageSquare className="h-3 w-3" aria-hidden />
+            {issue.comment_count}
+          </span>
+        ) : null}
       </div>
     </div>
   );

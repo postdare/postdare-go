@@ -6,6 +6,7 @@ import type {
   DataResponse,
   DeployTask,
   Issue,
+  IssueComment,
   IssueMetadata,
   IssueStatus,
   ListResponse,
@@ -153,6 +154,30 @@ export function moveIssue(
 
 export function listBoardUsers(token?: string | null) {
   return apiRequest<DataResponse<BoardUser[]>>("/api/v1/users", {}, token);
+}
+
+export function listIssueComments(issueID: string | number, token?: string | null) {
+  return apiRequest<DataResponse<IssueComment[]>>(`/api/v1/issues/${issueID}/comments`, {}, token);
+}
+
+export function createIssueComment(issueID: string | number, body: string, token?: string | null) {
+  return apiRequest<DataResponse<IssueComment>>(
+    `/api/v1/issues/${issueID}/comments`,
+    { method: "POST", body: JSON.stringify({ body }) },
+    token
+  );
+}
+
+export function updateIssueComment(commentID: string | number, body: string, token?: string | null) {
+  return apiRequest<DataResponse<IssueComment>>(
+    `/api/v1/issue-comments/${commentID}`,
+    { method: "PATCH", body: JSON.stringify({ body }) },
+    token
+  );
+}
+
+export function deleteIssueComment(commentID: string | number, token?: string | null) {
+  return apiRequest<void>(`/api/v1/issue-comments/${commentID}`, { method: "DELETE" }, token);
 }
 
 export function issueMetadata(token?: string | null) {

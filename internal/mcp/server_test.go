@@ -128,6 +128,8 @@ func TestBoardToolsAreListed(t *testing.T) {
 		"postdare_go.create_issue",
 		"postdare_go.update_issue",
 		"postdare_go.move_issue",
+		"postdare_go.list_issue_comments",
+		"postdare_go.comment_on_issue",
 	} {
 		if !listed[name] {
 			t.Fatalf("tool %s is not listed", name)
@@ -169,8 +171,9 @@ func TestIssueMutationToolsForwardConfirm(t *testing.T) {
 	call(t, server, "tools/call", `{"name":"postdare_go.create_issue","arguments":{"board_id":3,"title":"fix login","labels":["bug"],"confirm":true}}`)
 	call(t, server, "tools/call", `{"name":"postdare_go.update_issue","arguments":{"issue_id":9,"priority":"high","confirm":true}}`)
 	call(t, server, "tools/call", `{"name":"postdare_go.move_issue","arguments":{"issue_id":9,"status":"done","confirm":true}}`)
+	call(t, server, "tools/call", `{"name":"postdare_go.comment_on_issue","arguments":{"issue_id":9,"body":"deployed to staging","confirm":true}}`)
 
-	wantMethods := []string{http.MethodPost, http.MethodPatch, http.MethodPost}
+	wantMethods := []string{http.MethodPost, http.MethodPatch, http.MethodPost, http.MethodPost}
 	if !reflect.DeepEqual(methods, wantMethods) {
 		t.Fatalf("methods are %v, want %v", methods, wantMethods)
 	}
@@ -178,6 +181,7 @@ func TestIssueMutationToolsForwardConfirm(t *testing.T) {
 		{"title": "fix login", "labels": []interface{}{"bug"}, "confirm": true},
 		{"priority": "high", "confirm": true},
 		{"status": "done", "confirm": true},
+		{"body": "deployed to staging", "confirm": true},
 	}
 	if !reflect.DeepEqual(bodies, wantBodies) {
 		t.Fatalf("bodies are %v, want %v", bodies, wantBodies)

@@ -249,7 +249,7 @@ func (s *Service) DeleteBoard(ctx context.Context, boardID uint64) error {
 	})
 }
 
-// DeleteIssue removes an issue and the attachments hanging off it.
+// DeleteIssue removes an issue with the thread and attachments hanging off it.
 func (s *Service) DeleteIssue(ctx context.Context, issueID uint64) error {
 	var issue model.Issue
 	if err := s.DB.WithContext(ctx).First(&issue, issueID).Error; err != nil {
@@ -261,6 +261,7 @@ func (s *Service) DeleteIssue(ctx context.Context, issueID uint64) error {
 	if err := s.DB.WithContext(ctx).Delete(&issue).Error; err != nil {
 		return err
 	}
+	s.deleteCommentsForIssue(ctx, issue.ID)
 	s.DeleteAttachmentsForIssue(ctx, issue.ID)
 	s.publishBoard(issue.BoardID, "issue.deleted", issue.ID)
 	return nil

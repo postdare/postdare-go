@@ -161,3 +161,26 @@ type Attachment struct {
 	Size        int64     `gorm:"not null" json:"size"`
 	CreatedAt   time.Time `gorm:"index:idx_attachments_created_at" json:"created_at"`
 }
+
+// MaxIssueCommentLength caps one comment. A comment is a remark on an issue,
+// not the issue itself: anything longer belongs in the description, where it
+// can be edited as the record of the work rather than buried in a thread.
+const MaxIssueCommentLength = 20000
+
+// IssueComment is one message in an issue's thread.
+//
+// The body is markdown in the same dialect the description uses, including the
+// attachment URLs a pasted screenshot produces, so a comment renders through
+// the same reader and its images are owned by the issue -- deleting the issue
+// takes the thread and its screenshots with it.
+//
+// AuthorID is nullable so a comment survives the user row that wrote it: the
+// remark stays part of the issue's history even after the account is gone.
+type IssueComment struct {
+	ID        uint64    `gorm:"primaryKey" json:"id"`
+	IssueID   uint64    `gorm:"not null;index:idx_issue_comments_issue_id" json:"issue_id"`
+	AuthorID  *uint64   `json:"author_id"`
+	Body      string    `gorm:"type:text;not null" json:"body"`
+	CreatedAt time.Time `gorm:"index:idx_issue_comments_created_at" json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}

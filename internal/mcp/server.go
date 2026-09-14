@@ -249,6 +249,11 @@ func (s *Server) callTool(name string, args map[string]interface{}) (interface{}
 		optionalBool(args, "clear_assignee", body)
 		optionalLabels(args, "labels", body)
 		result, err = s.client.Patch(fmt.Sprintf("/api/v1/issues/%d", uintArg(args, "issue_id")), body)
+	case "postdare_go.list_issue_comments":
+		result, err = s.client.Get(fmt.Sprintf("/api/v1/issues/%d/comments", uintArg(args, "issue_id")), nil)
+	case "postdare_go.comment_on_issue":
+		body := map[string]interface{}{"body": strArg(args, "body"), "confirm": boolArg(args, "confirm")}
+		result, err = s.client.Post(fmt.Sprintf("/api/v1/issues/%d/comments", uintArg(args, "issue_id")), body)
 	case "postdare_go.move_issue":
 		body := map[string]interface{}{"confirm": boolArg(args, "confirm")}
 		optionalStr(args, "status", body)
@@ -397,6 +402,8 @@ func tools() []map[string]interface{} {
 		{"name": "postdare_go.get_issue", "description": "Get one issue by id, including its board key and the deploy tasks linked to it.", "inputSchema": schema(map[string]interface{}{"issue_id": intProp}, []string{"issue_id"})},
 		{"name": "postdare_go.create_issue", "description": "Create an issue on a board. Requires backend mcp.allow_mutation_tools=true and confirm=true.", "inputSchema": schema(map[string]interface{}{"board_id": intProp, "title": strProp, "description": strProp, "status": strProp, "priority": strProp, "assignee_id": intProp, "labels": map[string]string{"type": "array", "items": "string"}, "confirm": boolProp}, []string{"board_id", "title", "confirm"})},
 		{"name": "postdare_go.update_issue", "description": "Edit an issue in place; only the fields supplied are written. Requires backend mcp.allow_mutation_tools=true and confirm=true.", "inputSchema": schema(map[string]interface{}{"issue_id": intProp, "title": strProp, "description": strProp, "status": strProp, "priority": strProp, "assignee_id": intProp, "clear_assignee": boolProp, "labels": map[string]string{"type": "array", "items": "string"}, "confirm": boolProp}, []string{"issue_id", "confirm"})},
+		{"name": "postdare_go.list_issue_comments", "description": "List an issue's comment thread, oldest first. Bodies are markdown.", "inputSchema": schema(map[string]interface{}{"issue_id": intProp}, []string{"issue_id"})},
+		{"name": "postdare_go.comment_on_issue", "description": "Post a markdown comment on an issue. Requires backend mcp.allow_mutation_tools=true and confirm=true.", "inputSchema": schema(map[string]interface{}{"issue_id": intProp, "body": strProp, "confirm": boolProp}, []string{"issue_id", "body", "confirm"})},
 		{"name": "postdare_go.move_issue", "description": "Move an issue to a column, optionally between two known neighbours. Requires backend mcp.allow_mutation_tools=true and confirm=true.", "inputSchema": schema(map[string]interface{}{"issue_id": intProp, "status": strProp, "after_id": intProp, "before_id": intProp, "confirm": boolProp}, []string{"issue_id", "confirm"})},
 	}
 }

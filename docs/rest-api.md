@@ -125,6 +125,10 @@ Project deletion is destructive for database records: it removes the project, re
 | PATCH | `/api/v1/issues/{issue_id}` | Update issue |
 | DELETE | `/api/v1/issues/{issue_id}` | Delete issue |
 | POST | `/api/v1/issues/{issue_id}/move` | Move the issue to a column and position |
+| GET | `/api/v1/issues/{issue_id}/comments` | List the issue's comment thread |
+| POST | `/api/v1/issues/{issue_id}/comments` | Post a comment |
+| PATCH | `/api/v1/issue-comments/{comment_id}` | Edit a comment's body |
+| DELETE | `/api/v1/issue-comments/{comment_id}` | Delete a comment |
 
 A board is a stream of work and a project is a deployable service; a board's `project_id` is the optional bridge between the two. Boards and issues are returned whole rather than paged, because a kanban view has to place every card.
 
@@ -172,7 +176,19 @@ Neighbours rather than an index, so a board that changed underneath the client s
 
 `DELETE /api/v1/boards/{board_id}` returns `409 Conflict` with `BOARD_HAS_ISSUES` while the board still has issues, so a board cannot silently discard work.
 
-`GET /boards/{board_id}/issues` filters on `status`, `priority`, `assignee_id` (`none` selects the unassigned) and `q` (case-insensitive match on title and description).
+`GET /boards/{board_id}/issues` filters on `status`, `priority`, `assignee_id` (`none` selects the unassigned) and `q` (case-insensitive match on title and description). Each issue carries `comment_count`, so a card can show that a conversation is happening on it without the board fetching every thread.
+
+### Comments
+
+A comment is markdown in the same dialect as the description, including the `/api/v1/attachments/{id}` URLs a pasted screenshot produces. Post one with a single field:
+
+```json
+{ "body": "Reproduced on staging — see the screenshot." }
+```
+
+A body that is empty after trimming is refused with `422 COMMENT_BODY_REQUIRED`, and one longer than 20000 characters with `422 COMMENT_TOO_LONG`. The response carries `author_name` and `edited`, which says the body was rewritten after it was posted.
+
+Threads are returned whole, oldest first: a page of a conversation hides the remark that the next one answers. Only the author of a comment, or an admin, may `PATCH` or `DELETE` it — anyone else gets `403 COMMENT_FORBIDDEN`, because a remark is attributed and rewriting someone else's would put words in their name. Images referenced by a comment are bound to the issue, so deleting the issue takes the thread and its screenshots with it.
 
 ## Attachments
 

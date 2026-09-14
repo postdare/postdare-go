@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type NodeViewProps } from "@tiptap/react";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
@@ -7,6 +7,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 
 import { uploadAttachment } from "../../api/postdareGo";
 import { useAuthStore } from "../../store/auth";
+import { toast } from "../../store/toast";
 import { DescriptionImage } from "./attachmentImage";
 import { markdownContentClass } from "./IssueMarkdown";
 import { cn } from "../../lib/utils";
@@ -46,6 +47,17 @@ const MarkdownImage = Image.extend({
   }
 });
 
+/** What a surrounding field can ask of the editor once it exists. Uploading an
+ *  image from a button rather than a paste needs a way in, and a composer that
+ *  posts has to be able to empty itself without remounting and losing focus. */
+export interface MarkdownEditorHandle {
+  /** Resolves once every image is uploaded and placed, so the caller can show
+   *  that an upload is in flight. */
+  insertImages: (files: File[]) => Promise<void>;
+  clear: () => void;
+  focus: () => void;
+}
+
 /** The description editor: markdown you type becomes markdown you see, with no
  *  second pane. `**bold**` turns bold as the closing asterisk lands, `# ` makes
  *  a heading, and a pasted screenshot is uploaded and placed at the caret.
@@ -59,7 +71,9 @@ export function IssueMarkdownEditor({
   onChange,
   placeholder,
   autoFocus = false,
-  fill = false
+  fill = false,
+  onReady,
+  onSubmit
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -67,12 +81,18 @@ export function IssueMarkdownEditor({
   autoFocus?: boolean;
   /** Fills the height it is given, for the expanded composer. */
   fill?: boolean;
+  /** Hands the editor's controls to the field around it, and null when the
+   *  editor goes away, so a held handle cannot outlive the instance. */
+  onReady?: (handle: MarkdownEditorHandle | null) => void;
+  /** Cmd/Ctrl+Enter. A comment composer posts on it; a description field that
+   *  passes nothing leaves the shortcut to the page. */
+  onSubmit?: () => void;
 }) {
   const token = useAuthStore((state) => state.token);
   // Read inside the paste/drop handlers, which are fixed when the editor is
   // created and would otherwise close over the first render's props.
-  const latest = useRef({ onChange, token });
-  latest.current = { onChange, token };
+  const latest = useRef({ onChange, token, onSubmit });
+  latest.current = { onChange, token, onSubmit };
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
 
   /** Uploads the images and drops them in at the caret, in the order they were
@@ -84,9 +104,10 @@ export function IssueMarkdownEditor({
       try {
         const attachment = await uploadAttachment(file, latest.current.token);
         editorRef.current?.chain().focus().setImage({ src: attachment.url, alt: attachment.filename }).run();
-      } catch {
-        // The field shows upload failures on its own error line; an inline
-        // placeholder here would be replaced by the same message.
+      } catch (error) {
+        // Said out loud rather than swallowed: the image simply not appearing
+        // reads as the editor having dropped it.
+        toast(error instanceof Error ? error.message : "The image could not be uploaded", "danger");
       }
     }
   }
@@ -110,6 +131,14 @@ export function IssueMarkdownEditor({
       attributes: {
         class: cn(markdownContentClass, "focus:outline-none", fill && "scrollbar-subtle min-h-0 flex-1 overflow-y-auto")
       },
+      handleKeyDown: (_view, event) => {
+        if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return false;
+        const submit = latest.current.onSubmit;
+        if (!submit) return false;
+        event.preventDefault();
+        submit();
+        return true;
+      },
       handlePaste: (_view, event) => {
         const images = imagesFrom(event.clipboardData?.files);
         if (!images) return false;
@@ -130,6 +159,24 @@ export function IssueMarkdownEditor({
     onUpdate: ({ editor: instance }) => latest.current.onChange(instance.getMarkdown())
   });
   editorRef.current = editor;
+
+  // The handle is published once the editor exists and withdrawn when it goes,
+  // so a field holding it can never reach a torn-down instance.
+  useEffect(() => {
+    if (!onReady) return;
+    if (!editor) {
+      onReady(null);
+      return;
+    }
+    onReady({
+      insertImages: insertUploadedImages,
+      // Emitting the update is what tells the field its draft is empty now.
+      clear: () => editor.commands.clearContent(true),
+      focus: () => editor.commands.focus("end")
+    });
+    return () => onReady(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
 
   return (
     <div className={cn("flex min-h-0 flex-col", fill && "flex-1")}>

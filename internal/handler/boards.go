@@ -27,6 +27,9 @@ type issueResponse struct {
 	BoardKey     string `json:"board_key"`
 	AssigneeName string `json:"assignee_name,omitempty"`
 	CreatorName  string `json:"creator_name,omitempty"`
+	// CommentCount lets a card show that a conversation is happening on it
+	// without the board fetching every thread.
+	CommentCount int `json:"comment_count"`
 }
 
 func (h *Handler) ListBoards(c *gin.Context) {
@@ -187,7 +190,7 @@ func (h *Handler) ListBoardIssues(c *gin.Context) {
 		util.Error(c, http.StatusInternalServerError, "ISSUE_LIST_FAILED", "Failed to list issues", nil)
 		return
 	}
-	util.OK(c, h.issueResponses(board, issues))
+	util.OK(c, h.issueResponses(c, board, issues))
 }
 
 func (h *Handler) CreateBoardIssue(c *gin.Context) {
@@ -226,7 +229,7 @@ func (h *Handler) CreateBoardIssue(c *gin.Context) {
 		h.issueError(c, err)
 		return
 	}
-	util.Created(c, h.issueResponse(board, issue))
+	util.Created(c, h.issueResponse(c, board, issue))
 }
 
 func (h *Handler) GetIssue(c *gin.Context) {
@@ -234,7 +237,7 @@ func (h *Handler) GetIssue(c *gin.Context) {
 	if !ok {
 		return
 	}
-	util.OK(c, h.issueResponse(board, issue))
+	util.OK(c, h.issueResponse(c, board, issue))
 }
 
 func (h *Handler) UpdateIssue(c *gin.Context) {
@@ -329,7 +332,7 @@ func (h *Handler) UpdateIssue(c *gin.Context) {
 		h.Service.BindAttachments(c.Request.Context(), issue.ID, issue.Description)
 	}
 	h.Service.PublishIssueChanged(board.ID, issue.ID)
-	util.OK(c, h.issueResponse(board, issue))
+	util.OK(c, h.issueResponse(c, board, issue))
 }
 
 // MoveIssue places a dragged card. The client sends the neighbours it dropped
@@ -365,7 +368,7 @@ func (h *Handler) MoveIssue(c *gin.Context) {
 		h.issueError(c, err)
 		return
 	}
-	util.OK(c, h.issueResponse(board, *moved))
+	util.OK(c, h.issueResponse(c, board, *moved))
 }
 
 func (h *Handler) DeleteIssue(c *gin.Context) {
@@ -556,14 +559,14 @@ func (h *Handler) boardResponse(board model.Board) boardResponse {
 	return response
 }
 
-func (h *Handler) issueResponse(board model.Board, issue model.Issue) issueResponse {
-	return h.issueResponses(board, []model.Issue{issue})[0]
+func (h *Handler) issueResponse(c *gin.Context, board model.Board, issue model.Issue) issueResponse {
+	return h.issueResponses(c, board, []model.Issue{issue})[0]
 }
 
 // issueResponses resolves the assignee and creator names for a whole column at
 // once: a board renders every card, so per-card lookups would be one query per
 // card.
-func (h *Handler) issueResponses(board model.Board, issues []model.Issue) []issueResponse {
+func (h *Handler) issueResponses(c *gin.Context, board model.Board, issues []model.Issue) []issueResponse {
 	out := make([]issueResponse, 0, len(issues))
 	if len(issues) == 0 {
 		return out
@@ -578,14 +581,20 @@ func (h *Handler) issueResponses(board model.Board, issues []model.Issue) []issu
 		}
 	}
 	names := h.usernames(userIDs)
+	issueIDs := make([]uint64, 0, len(issues))
+	for _, issue := range issues {
+		issueIDs = append(issueIDs, issue.ID)
+	}
+	commentCounts := h.Service.CountIssueComments(c.Request.Context(), issueIDs)
 	for _, issue := range issues {
 		if issue.Labels == nil {
 			issue.Labels = []string{}
 		}
 		response := issueResponse{
-			Issue:      issue,
-			Identifier: issue.Identifier(board.Key),
-			BoardKey:   board.Key,
+			Issue:        issue,
+			Identifier:   issue.Identifier(board.Key),
+			BoardKey:     board.Key,
+			CommentCount: commentCounts[issue.ID],
 		}
 		if issue.AssigneeID != nil {
 			response.AssigneeName = names[*issue.AssigneeID]

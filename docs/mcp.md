@@ -83,10 +83,12 @@ Both transports serve this list.
 | `postdare_go.create_issue` | File an issue when mutation tools are enabled |
 | `postdare_go.update_issue` | Edit an issue when mutation tools are enabled |
 | `postdare_go.move_issue` | Move an issue to a column when mutation tools are enabled |
+| `postdare_go.list_issue_comments` | Read an issue's comment thread |
+| `postdare_go.comment_on_issue` | Post a markdown comment when mutation tools are enabled |
 
 Reports are the structured artifacts a deploy stage captures with `capture_as` (today `ai_review`). Both report tools are read-only and return the same payload as the REST endpoints, including each issue's `diff_hunk`, so an agent reads the reviewed code beside the finding. Sharing a report stays out of MCP: share links are created and revoked from the web UI only.
 
-Boards are the work side of the server. A board owns its issues. The four read tools return the same payloads as the REST endpoints. Uploading attachments, creating or deleting boards and deleting issues stay out of MCP.
+Boards are the work side of the server. A board owns its issues, and an issue owns its comment thread. The five read tools return the same payloads as the REST endpoints. Uploading attachments, creating or deleting boards, deleting issues, and editing or deleting comments stay out of MCP: a comment is attributed to whoever posted it, and an agent has no account to answer for one.
 
 Mutation tools are disabled by default:
 
