@@ -198,7 +198,7 @@ export function BoardsPage() {
             <p className="max-w-sm text-xs text-muted">
               {showArchived
                 ? "Archiving retires a finished board from this list without deleting its issues, so the identifiers they were given still resolve."
-                : "A board holds issues and gives them identifiers like ENG-42, which a commit message can reference to close them on deploy."}
+                : "A board holds issues and gives them identifiers like ENG-42, short enough to quote in a commit message or a chat thread and still be unambiguous."}
             </p>
           </CardContent>
         </Card>
