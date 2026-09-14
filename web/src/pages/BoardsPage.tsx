@@ -5,12 +5,11 @@ import { KanbanSquare, Plus } from "lucide-react";
 
 import { createBoard, listBoards, listProjects } from "../api/postdareGo";
 import { PageHeader } from "../components/PageHeader";
-import { ISSUE_STATUSES, STATUS_DOT, STATUS_LABELS } from "../components/board/boardMeta";
+import { ISSUE_STATUSES, STATUS_LABELS } from "../components/board/boardMeta";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { cn } from "../lib/utils";
 import { useAuthStore } from "../store/auth";
 
 /** Derives ENG from "Engineering" so the key field is usually already right --
@@ -178,33 +177,33 @@ export function BoardsPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((board) => {
-          const open = ISSUE_STATUSES.filter((status) => status !== "done" && status !== "canceled").reduce(
-            (total, status) => total + (board.issue_counts?.[status] ?? 0),
-            0
-          );
+          const counts = ISSUE_STATUSES.map((status) => ({ status, count: board.issue_counts?.[status] ?? 0 }));
+          const total = counts.reduce((sum, entry) => sum + entry.count, 0);
+          const open = counts
+            .filter(({ status }) => status !== "done" && status !== "canceled")
+            .reduce((sum, entry) => sum + entry.count, 0);
+          /* The per-status breakdown belongs on the board, not on the index --
+           * five counts, mostly zero, buried the one number a card is read for.
+           * It survives as the count's tooltip, which costs the card nothing. */
+          const breakdown = counts
+            .filter((entry) => entry.count > 0)
+            .map(({ status, count }) => `${STATUS_LABELS[status]} ${count}`)
+            .join(" · ");
           return (
             <Link key={board.id} to={`/boards/${board.id}`} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/65">
               <Card className="h-full transition-colors hover:border-primary/40">
-                <CardContent className="space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-ink">{board.name}</div>
-                      <div className="mt-0.5 font-mono text-[11px] text-muted">{board.key}</div>
-                    </div>
-                    <span className="shrink-0 text-xs text-muted">{open} open</span>
+                <CardContent className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="truncate text-sm font-medium text-ink">{board.name}</div>
+                    <span className="shrink-0 text-xs text-muted" title={breakdown || undefined}>
+                      {total === 0 ? "No issues" : `${open} open`}
+                    </span>
+                  </div>
+                  <div className="truncate text-[11px] text-muted">
+                    <span className="font-mono">{board.key}</span>
+                    {board.project_name ? ` · Deploys via ${board.project_name}` : null}
                   </div>
                   {board.description ? <p className="line-clamp-2 text-xs text-muted">{board.description}</p> : null}
-                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {ISSUE_STATUSES.map((status) => (
-                      <span key={status} className="inline-flex items-center gap-1 text-[11px] text-muted">
-                        <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[status])} />
-                        {STATUS_LABELS[status]} {board.issue_counts?.[status] ?? 0}
-                      </span>
-                    ))}
-                  </div>
-                  {board.project_name ? (
-                    <p className="text-[11px] text-muted">Deploys via {board.project_name}</p>
-                  ) : null}
                 </CardContent>
               </Card>
             </Link>
