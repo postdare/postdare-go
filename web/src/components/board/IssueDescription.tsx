@@ -1,9 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
-import { Code2, ImagePlus, Loader2, Pilcrow } from "lucide-react";
+import { Code2, Pilcrow } from "lucide-react";
 
-import { uploadAttachment } from "../../api/postdareGo";
 import { Textarea } from "../ui/textarea";
-import { useAuthStore } from "../../store/auth";
 import { IssueMarkdown } from "./IssueMarkdown";
 import { cn } from "../../lib/utils";
 
@@ -26,8 +24,7 @@ function EditorLoading({ fill }: { fill: boolean }) {
 
 /** The description field: rendered markdown until you click into it, then an
  *  editor that renders what you type as you type it. A pasted or dropped
- *  screenshot is uploaded and placed at the caret, which is the whole point of
- *  the field carrying images.
+ *  screenshot is uploaded and placed at the caret.
  *
  *  The source view is one click away on purpose: markdown this editor has no
  *  schema for (a table, a nested list with unusual indentation) comes back
@@ -55,15 +52,11 @@ export function IssueDescriptionField({
    *  expanded composer hands the spare room to the description. */
   grow?: boolean;
 }) {
-  const token = useAuthStore((state) => state.token);
   const [editing, setEditing] = useState(startEditing ?? value.trim() === "");
   const [source, setSource] = useState(false);
-  const [uploading, setUploading] = useState(0);
-  const [error, setError] = useState<string>();
-  const fileRef = useRef<HTMLInputElement>(null);
   // Whether the click that is about to blur the field landed inside it. A click
-  // on a button of our own, or the file dialog taking focus, leaves a blur with
-  // no relatedTarget to inspect, and neither should collapse the field.
+  // on a button of our own leaves a blur with no relatedTarget to inspect, and
+  // it should not collapse the field.
   const pointerInside = useRef(false);
 
   // Clicking a description to edit it is the expected next move on this screen,
@@ -73,25 +66,6 @@ export function IssueDescriptionField({
     const timer = window.setTimeout(() => void import("./IssueMarkdownEditor"), 1200);
     return () => window.clearTimeout(timer);
   }, [editing]);
-
-  async function upload(files: File[]) {
-    const images = files.filter((file) => file.type.startsWith("image/"));
-    if (images.length === 0) return;
-    setError(undefined);
-    setUploading((count) => count + images.length);
-    for (const file of images) {
-      try {
-        const attachment = await uploadAttachment(file, token);
-        // Appended rather than inserted: this path is for the button, whose
-        // file dialog moves the caret out of the field anyway.
-        onChange(`${value.trimEnd()}\n\n![${attachment.filename}](${attachment.url})\n`);
-      } catch (uploadError) {
-        setError(uploadError instanceof Error ? uploadError.message : "Upload failed");
-      } finally {
-        setUploading((count) => count - 1);
-      }
-    }
-  }
 
   return (
     <div
@@ -146,20 +120,8 @@ export function IssueDescriptionField({
         </button>
       )}
 
-      <div className="mt-1.5 flex shrink-0 flex-wrap items-center gap-2 text-[11px] text-muted">
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/65"
-          onClick={() => {
-            setEditing(true);
-            if (source) return;
-            fileRef.current?.click();
-          }}
-        >
-          <ImagePlus className="h-3 w-3" aria-hidden />
-          Add image
-        </button>
-        {editing ? (
+      {editing ? (
+        <div className="mt-1.5 flex shrink-0 flex-wrap items-center gap-2 text-[11px] text-muted">
           <button
             type="button"
             className="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/65"
@@ -169,28 +131,8 @@ export function IssueDescriptionField({
             {source ? <Pilcrow className="h-3 w-3" aria-hidden /> : <Code2 className="h-3 w-3" aria-hidden />}
             {source ? "Rich text" : "Markdown"}
           </button>
-        ) : null}
-        <span className={cn(uploading > 0 ? "inline-flex items-center gap-1" : "hidden")}>
-          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-          Uploading {uploading}…
-        </span>
-        {uploading === 0 && !error && !bare ? (
-          <span>Paste or drop a screenshot. PNG, JPEG, GIF or WebP, up to 10MB.</span>
-        ) : null}
-        {error ? <span className="text-danger">{error}</span> : null}
-      </div>
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp"
-        multiple
-        className="hidden"
-        onChange={(event) => {
-          void upload(Array.from(event.target.files ?? []));
-          event.target.value = "";
-        }}
-      />
+        </div>
+      ) : null}
     </div>
   );
 }

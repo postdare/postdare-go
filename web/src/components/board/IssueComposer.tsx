@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Maximize2, Minimize2, Paperclip, X } from "lucide-react";
+import { Maximize2, Minimize2, X } from "lucide-react";
 
 import { createIssue, listBoardLabels, listBoardUsers } from "../../api/postdareGo";
 import { useQuery } from "@tanstack/react-query";
@@ -163,11 +163,7 @@ export function IssueComposer({
 
           {create.error ? <p className="shrink-0 px-4 pt-2 text-sm text-danger">{create.error.message}</p> : null}
 
-          <div className="mt-3 flex shrink-0 items-center justify-between gap-2 border-t border-border px-4 py-3">
-            <span className="inline-flex items-center gap-1 text-xs text-muted">
-              <Paperclip className="h-3.5 w-3.5" aria-hidden />
-              Paste a screenshot
-            </span>
+          <div className="mt-3 flex shrink-0 items-center justify-end gap-2 border-t border-border px-4 py-3">
             <div className="flex items-center gap-3">
               <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-muted">
                 <input
