@@ -250,15 +250,6 @@ export function BoardPage() {
         All boards
       </Link>
 
-      {boardData?.project_name ? (
-        <p className="mb-3 shrink-0 text-xs text-muted">
-          Linked to project{" "}
-          <Link to={`/projects/${boardData.project_id}`} className="text-primary hover:underline">
-            {boardData.project_name}
-          </Link>
-        </p>
-      ) : null}
-
       {issues.isError ? (
         <p className="shrink-0 rounded-md border border-danger/35 bg-danger/10 p-3 text-sm text-danger">
           Could not load this board's issues.
