@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import type { Report, ReportIssue } from "../api/types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { highlightLines, languageForPath, type HighlightNode } from "../lib/diffHighlight";
+import { highlightCode, highlightLines, languageForPath, type HighlightNode } from "../lib/diffHighlight";
 import { copyText } from "../lib/clipboard";
 import { toast } from "../store/toast";
 
@@ -135,20 +135,115 @@ export function ReportBody({ report }: { report: Report }) {
   );
 }
 
+function extractText(node: React.ReactNode): string {
+  if (typeof node === "string") return node;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (isValidElement<{ children?: React.ReactNode }>(node)) return extractText(node.props.children);
+  return "";
+}
+
+function HighlightedCode({ nodes }: { nodes: HighlightNode[] }) {
+  return (
+    <>
+      {nodes.map((node, index) =>
+        node.type === "text" ? (
+          node.value
+        ) : (
+          <span key={index} className={node.className}>
+            <HighlightedCode nodes={node.children} />
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
 function MarkdownCode({ className, children, ...props }: React.ComponentPropsWithoutRef<"code">) {
-  const language = /language-(\w+)/.exec(className ?? "")?.[1];
-  const source = String(children).replace(/\n$/, "");
+  const language = /language-([a-zA-Z0-9_-]+)/.exec(className ?? "")?.[1];
+  const rawText = extractText(children);
+  const source = rawText.replace(/\n$/, "");
   if (language === "mermaid") return <MermaidDiagram source={source} />;
+
+  // Highlight block code: language specified or multiline text
+  if (language || rawText.includes("\n")) {
+    const nodes = highlightCode(source, language);
+    return (
+      <code className={className} {...props}>
+        <HighlightedCode nodes={nodes} />
+      </code>
+    );
+  }
+
   return <code className={className} {...props}>{children}</code>;
 }
 
-// A diagram renders as a <figure>, which cannot live inside the <pre> that
-// react-markdown wraps a fenced block in; unwrap the <pre> for those blocks.
+// Code blocks render with a header bar showing language and a copy button.
+// Mermaid diagrams unwrap the <pre> because <figure> cannot live inside <pre>.
 function MarkdownPre({ children, ...props }: React.ComponentPropsWithoutRef<"pre">) {
   const child = Array.isArray(children) ? children[0] : children;
   const className = isValidElement<{ className?: string }>(child) ? child.props.className ?? "" : "";
   if (/\blanguage-mermaid\b/.test(className)) return <>{children}</>;
-  return <pre {...props}>{children}</pre>;
+
+  const language = /language-([a-zA-Z0-9_-]+)/.exec(className)?.[1];
+  const codeText = extractText(children).replace(/\n$/, "");
+
+  return (
+    <ReportCodeBlock language={language} codeText={codeText}>
+      <pre {...props}>{children}</pre>
+    </ReportCodeBlock>
+  );
+}
+
+function ReportCodeBlock({
+  language,
+  codeText,
+  children,
+}: {
+  language?: string;
+  codeText: string;
+  children: React.ReactNode;
+}) {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    if (!codeText) return;
+    const success = await copyText(codeText);
+    if (!success) {
+      toast("Could not copy to the clipboard", "danger");
+      return;
+    }
+    setCopied(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = window.setTimeout(() => setCopied(false), 2000);
+    toast("Copied code to clipboard");
+  };
+
+  return (
+    <div className="report-code-block">
+      <div className="report-code-head">
+        <span className="report-code-lang">{language || "code"}</span>
+        <button
+          type="button"
+          className="report-code-copy"
+          onClick={handleCopy}
+          title="Copy code"
+          aria-label="Copy code"
+        >
+          {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
+          <span className={copied ? "text-success" : ""}>{copied ? "Copied" : "Copy"}</span>
+        </button>
+      </div>
+      {children}
+    </div>
+  );
 }
 
 function MermaidDiagram({ source }: { source: string }) {
@@ -301,22 +396,6 @@ const diffMarkers: Record<DiffRow["kind"], string> = { add: "+", del: "-", conte
 // on the rows, so the header carries only the path.
 function excerptPath(location?: string) {
   return (location ?? "").replace(/:\d+.*$/, "").trim();
-}
-
-function HighlightedCode({ nodes }: { nodes: HighlightNode[] }) {
-  return (
-    <>
-      {nodes.map((node, index) =>
-        node.type === "text" ? (
-          node.value
-        ) : (
-          <span key={index} className={node.className}>
-            <HighlightedCode nodes={node.children} />
-          </span>
-        ),
-      )}
-    </>
-  );
 }
 
 // Each side is highlighted as one document and then split by line, so a construct

@@ -1,11 +1,19 @@
 import { createLowlight } from "lowlight";
 import bash from "highlight.js/lib/languages/bash";
+import c from "highlight.js/lib/languages/c";
+import cpp from "highlight.js/lib/languages/cpp";
 import css from "highlight.js/lib/languages/css";
+import diff from "highlight.js/lib/languages/diff";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
 import go from "highlight.js/lib/languages/go";
+import groovy from "highlight.js/lib/languages/groovy";
+import ini from "highlight.js/lib/languages/ini";
 import java from "highlight.js/lib/languages/java";
 import javascript from "highlight.js/lib/languages/javascript";
 import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
 import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
 import scss from "highlight.js/lib/languages/scss";
 import sql from "highlight.js/lib/languages/sql";
 import typescript from "highlight.js/lib/languages/typescript";
@@ -15,12 +23,20 @@ import yaml from "highlight.js/lib/languages/yaml";
 // Only registered languages are bundled. Adding one is an import plus two lines.
 const lowlight = createLowlight({
   bash,
+  c,
+  cpp,
   css,
+  diff,
+  dockerfile,
   go,
+  groovy,
+  ini,
   java,
   javascript,
   json,
+  markdown,
   python,
+  rust,
   scss,
   sql,
   typescript,
@@ -32,12 +48,20 @@ const lowlight = createLowlight({
 // shows, and highlight.js has no Vue grammar.
 const languageByExtension: Record<string, string> = {
   bash: "bash", sh: "bash", zsh: "bash",
+  c: "c", h: "c",
+  cpp: "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp",
   css: "css", scss: "scss", less: "scss",
+  diff: "diff", patch: "diff",
+  dockerfile: "dockerfile",
   go: "go",
+  groovy: "groovy", gvy: "groovy", gy: "groovy", gsh: "groovy",
+  ini: "ini", conf: "ini", toml: "ini",
   java: "java",
   js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
   json: "json",
+  md: "markdown", markdown: "markdown",
   py: "python",
+  rs: "rust",
   sql: "sql",
   ts: "typescript", tsx: "typescript",
   htm: "xml", html: "xml", svg: "xml", vue: "xml", xml: "xml",
@@ -110,3 +134,34 @@ export function highlightLines(code: string, language: string): HighlightNode[][
     return code.split("\n").map((line) => [{ type: "text", value: line }]);
   }
 }
+
+const languageAliases: Record<string, string> = {
+  shell: "bash",
+  sh: "bash",
+  zsh: "bash",
+  golang: "go",
+  py: "python",
+  rb: "ruby",
+  yml: "yaml",
+};
+
+// highlightCode returns a tree of highlighted nodes for an entire code snippet,
+// with auto-detection fallback if no language is specified.
+export function highlightCode(code: string, language?: string): HighlightNode[] {
+  try {
+    const normalized = language
+      ? languageAliases[language.toLowerCase()] ?? language.toLowerCase()
+      : undefined;
+    if (normalized && lowlight.registered(normalized)) {
+      return toNodes(lowlight.highlight(normalized, code).children as HastNode[]);
+    }
+    const auto = lowlight.highlightAuto(code);
+    if (auto && (auto.data as { relevance?: number })?.relevance && (auto.data as { relevance: number }).relevance > 0) {
+      return toNodes(auto.children as HastNode[]);
+    }
+  } catch {
+    // A grammar can throw on a snippet; plain text still reads fine.
+  }
+  return [{ type: "text", value: code }];
+}
+

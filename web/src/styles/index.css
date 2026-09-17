@@ -198,21 +198,41 @@ select {
 .issue-diff .diff-del .diff-marker { color: oklch(var(--danger)); }
 .issue-diff-note { margin-top: 12px; color: oklch(var(--muted)); font-size: 12px; }
 
-/* Syntax colours for the diff excerpt. Drawn from the theme tokens rather than a
-   highlight.js stylesheet, so they follow light and dark and sit legibly on the
-   green and red row tints. */
-.issue-diff .hljs-comment, .issue-diff .hljs-quote { color: oklch(var(--muted)); font-style: italic; }
+/* Syntax colours for diff excerpts and markdown code blocks. Drawn from the
+   theme tokens rather than a highlight.js stylesheet, so they follow light and
+   dark and sit legibly across the product. */
+.issue-diff .hljs-comment, .issue-diff .hljs-quote,
+.report-markdown .hljs-comment, .report-markdown .hljs-quote,
+.issue-markdown .hljs-comment, .issue-markdown .hljs-quote { color: oklch(var(--muted)); font-style: italic; }
 .issue-diff .hljs-keyword, .issue-diff .hljs-selector-tag, .issue-diff .hljs-literal,
-.issue-diff .hljs-doctag, .issue-diff .hljs-meta { color: oklch(var(--primary)); }
-.issue-diff .hljs-string, .issue-diff .hljs-regexp, .issue-diff .hljs-addition { color: oklch(var(--success)); }
-.issue-diff .hljs-number, .issue-diff .hljs-symbol, .issue-diff .hljs-bullet { color: oklch(var(--warning)); }
+.issue-diff .hljs-doctag, .issue-diff .hljs-meta,
+.report-markdown .hljs-keyword, .report-markdown .hljs-selector-tag, .report-markdown .hljs-literal,
+.report-markdown .hljs-doctag, .report-markdown .hljs-meta,
+.issue-markdown .hljs-keyword, .issue-markdown .hljs-selector-tag, .issue-markdown .hljs-literal,
+.issue-markdown .hljs-doctag, .issue-markdown .hljs-meta { color: oklch(var(--primary)); }
+.issue-diff .hljs-string, .issue-diff .hljs-regexp, .issue-diff .hljs-addition,
+.report-markdown .hljs-string, .report-markdown .hljs-regexp, .report-markdown .hljs-addition,
+.issue-markdown .hljs-string, .issue-markdown .hljs-regexp, .issue-markdown .hljs-addition { color: oklch(var(--success)); }
+.issue-diff .hljs-number, .issue-diff .hljs-symbol, .issue-diff .hljs-bullet,
+.report-markdown .hljs-number, .report-markdown .hljs-symbol, .report-markdown .hljs-bullet,
+.issue-markdown .hljs-number, .issue-markdown .hljs-symbol, .issue-markdown .hljs-bullet { color: oklch(var(--warning)); }
 .issue-diff .hljs-title, .issue-diff .hljs-section, .issue-diff .hljs-name,
-.issue-diff .hljs-selector-id, .issue-diff .hljs-selector-class { color: oklch(var(--info)); }
+.issue-diff .hljs-selector-id, .issue-diff .hljs-selector-class,
+.report-markdown .hljs-title, .report-markdown .hljs-section, .report-markdown .hljs-name,
+.report-markdown .hljs-selector-id, .report-markdown .hljs-selector-class,
+.issue-markdown .hljs-title, .issue-markdown .hljs-section, .issue-markdown .hljs-name,
+.issue-markdown .hljs-selector-id, .issue-markdown .hljs-selector-class { color: oklch(var(--info)); }
 .issue-diff .hljs-attr, .issue-diff .hljs-attribute, .issue-diff .hljs-variable,
-.issue-diff .hljs-template-variable { color: oklch(var(--accent)); }
-.issue-diff .hljs-type, .issue-diff .hljs-built_in, .issue-diff .hljs-class { color: oklch(var(--danger)); }
-.issue-diff .hljs-emphasis { font-style: italic; }
-.issue-diff .hljs-strong { font-weight: 600; }
+.issue-diff .hljs-template-variable,
+.report-markdown .hljs-attr, .report-markdown .hljs-attribute, .report-markdown .hljs-variable,
+.report-markdown .hljs-template-variable,
+.issue-markdown .hljs-attr, .issue-markdown .hljs-attribute, .issue-markdown .hljs-variable,
+.issue-markdown .hljs-template-variable { color: oklch(var(--accent)); }
+.issue-diff .hljs-type, .issue-diff .hljs-built_in, .issue-diff .hljs-class,
+.report-markdown .hljs-type, .report-markdown .hljs-built_in, .report-markdown .hljs-class,
+.issue-markdown .hljs-type, .issue-markdown .hljs-built_in, .issue-markdown .hljs-class { color: oklch(var(--danger)); }
+.issue-diff .hljs-emphasis, .report-markdown .hljs-emphasis, .issue-markdown .hljs-emphasis { font-style: italic; }
+.issue-diff .hljs-strong, .report-markdown .hljs-strong, .issue-markdown .hljs-strong { font-weight: 600; }
 .report-markdown { color: oklch(var(--ink)); font-size: 14px; line-height: 1.75; }
 .report-markdown h1, .report-markdown h2, .report-markdown h3 { margin: 1.6em 0 .55em; font-weight: 650; line-height: 1.3; text-wrap: balance; }
 .report-markdown h1 { font-size: 22px; } .report-markdown h2 { font-size: 18px; } .report-markdown h3 { font-size: 15px; }
@@ -222,7 +242,14 @@ select {
 .report-markdown a { color: oklch(var(--info)); text-decoration: underline; text-underline-offset: 3px; }
 .report-markdown blockquote { border-left: 1px solid oklch(var(--border)); padding-left: 14px; color: oklch(var(--muted)); }
 .report-markdown :not(pre) > code { border-radius: 4px; background: oklch(var(--surface-2)); padding: 2px 5px; font-family: theme(fontFamily.mono); font-size: .9em; }
-.report-markdown pre { max-width: 100%; overflow: auto; border-radius: 10px; background: oklch(var(--surface)); padding: 16px; font-family: theme(fontFamily.mono); font-size: 12px; line-height: 1.65; }
+.report-markdown pre { max-width: 100%; overflow: auto; border: 1px solid oklch(var(--border)); border-radius: 8px; background: oklch(var(--surface-2)); padding: 12px 14px; font-family: theme(fontFamily.mono); font-size: 12px; line-height: 1.65; tab-size: 4; }
+.report-markdown pre code { font-family: inherit; font-size: inherit; line-height: inherit; color: oklch(var(--ink)); background: transparent; padding: 0; }
+.report-code-block { margin: 14px 0; border: 1px solid oklch(var(--border)); border-radius: 8px; background: oklch(var(--surface-2)); overflow: hidden; }
+.report-code-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-bottom: 1px solid oklch(var(--border)); background: oklch(var(--surface)); }
+.report-code-lang { font-family: theme(fontFamily.mono); font-size: 11px; font-weight: 500; color: oklch(var(--muted)); text-transform: lowercase; }
+.report-code-copy { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; border: none; background: transparent; color: oklch(var(--muted)); font-size: 11px; cursor: pointer; transition: color 150ms ease, background 150ms ease; }
+.report-code-copy:hover { color: oklch(var(--ink)); background: oklch(var(--surface-2)); }
+.report-code-block pre { margin: 0; border: none; border-radius: 0; background: transparent; padding: 12px 14px; }
 .report-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
 .report-markdown th, .report-markdown td { border-bottom: 1px solid oklch(var(--border)); padding: 8px 12px; text-align: left; }
 
