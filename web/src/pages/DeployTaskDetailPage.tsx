@@ -1,4 +1,4 @@
-import { AlertTriangle, Ban, FileSearch, RotateCcw } from "lucide-react";
+import { AlertTriangle, Ban, ExternalLink, FileSearch, RotateCcw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -9,7 +9,7 @@ import { LogViewer } from "../components/LogViewer";
 import { PageHeader } from "../components/PageHeader";
 import { ReportBody, reportTypeLabel } from "../components/ReportView";
 import { Badge, statusTone } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
+import { Button, buttonVariants } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { useEventStream } from "../hooks/useEventStream";
 import { cn, formatDate, shortCommit } from "../lib/utils";
@@ -109,12 +109,21 @@ export function DeployTaskDetailPage() {
       </div>
       {(reports.data?.data ?? []).map((report) => (
         <Card key={report.id} className="mt-4">
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <FileSearch className="h-4 w-4" />
               {reportTypeLabel(report.type)}
             </CardTitle>
-            <Badge tone={statusTone(report.status)}>{report.status}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge tone={statusTone(report.status)}>{report.status}</Badge>
+              {/* A link, not a button that opens a window: the report page is a
+                  page of its own, so it can be middle-clicked, opened in a
+                  window the browser sizes, or have its address copied. */}
+              <Link className={buttonVariants({ variant: "ghost", size: "sm" })} to={`/reports/${report.id}`} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open in new tab
+              </Link>
+            </div>
           </CardHeader>
           <CardContent>
             <ReportBody report={report} />

@@ -233,8 +233,14 @@ Authenticated report endpoints are:
 - `POST /api/v1/reports/{report_id}/share` (creates or rotates the token)
 - `DELETE /api/v1/reports/{report_id}/share`
 
-The public page calls `GET /api/v1/public/reports/{report_id}` with the token in the
-`X-Report-Token` header.
+The report page at `/reports/{report_id}` is reached two ways. A notification hands it a
+link whose token it sends as `X-Report-Token` to
+`GET /api/v1/public/reports/{report_id}`, which is all a reader without an account has.
+The deploy task page opens the same page for the operator, who is already signed in, and
+that visit reads `GET /api/v1/reports/{report_id}` with its session instead. A token in
+the link wins over a session when both are present, so opening a shared link always
+answers with the link's own credential -- otherwise a revoked link would keep rendering
+for anyone who happens to be signed in.
 
 The raw token is never stored. Each report holds a random salt, and the token is
 derived from that salt plus `jwt.secret`, so a database copy alone yields no working

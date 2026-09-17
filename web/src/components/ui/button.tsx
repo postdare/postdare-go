@@ -3,7 +3,10 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "../../lib/utils";
 
-const buttonVariants = cva(
+/** Exported because a link that should look like a button -- an action that
+ *  navigates rather than runs, so it can be middle-clicked or copied -- reuses
+ *  these classes on its anchor instead of a <button> that opens a window. */
+export const buttonVariants = cva(
   "inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/65 disabled:pointer-events-none disabled:opacity-45",
   {
     variants: {

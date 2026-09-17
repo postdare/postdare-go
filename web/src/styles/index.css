@@ -144,7 +144,7 @@ select {
 
 .report-shell { min-height: 100dvh; background: oklch(var(--background)); }
 .report-header { border-bottom: 1px solid oklch(var(--border)); background: oklch(var(--surface)); }
-.report-header-inner { width: min(1080px, calc(100% - 32px)); min-height: 80px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.report-header-inner { width: min(1080px, calc(100% - 32px)); min-height: 80px; margin: 0 auto; padding: 20px 0; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .report-mark { display: grid; width: 38px; height: 38px; flex: none; place-items: center; border-radius: 10px; background: oklch(var(--primary)); color: oklch(var(--primary-ink)); }
 .report-commit { display: flex; flex: none; align-items: center; gap: 8px; color: oklch(var(--muted)); font-family: theme(fontFamily.mono); font-size: 12px; }
 .report-content { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 64px; }
@@ -269,7 +269,7 @@ select {
 
 @media (max-width: 640px) {
   .report-header-inner, .report-overview { align-items: flex-start; flex-direction: column; }
-  .report-header-inner { padding: 16px 0; gap: 12px; }
+  .report-header-inner { gap: 12px; }
   .report-commit { padding-left: 50px; }
   .risk-counts { width: 100%; justify-content: space-between; }
   .issue-head { align-items: flex-start; flex-direction: column; gap: 6px; }
