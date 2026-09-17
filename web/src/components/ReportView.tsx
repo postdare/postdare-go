@@ -1,12 +1,15 @@
 import { isValidElement, useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Maximize2, Minus, Plus, ShieldAlert, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Copy, Maximize2, Minus, Plus, ShieldAlert, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 
 import type { Report, ReportIssue } from "../api/types";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { highlightLines, languageForPath, type HighlightNode } from "../lib/diffHighlight";
+import { copyText } from "../lib/clipboard";
+import { toast } from "../store/toast";
 
 // Display names for the report types the server can produce; keep in sync with
 // model.ReportTypes(). An unknown type still renders, just without a name.
@@ -38,6 +41,34 @@ export function ReportBody({ report }: { report: Report }) {
   // A run can succeed and still report findings, so a green tick is only right
   // when the review came back with nothing to fix.
   const verdict = report.status !== "success" ? "failed" : counts.high + counts.medium + counts.low > 0 ? "attention" : "clear";
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current !== null) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    if (!report.markdown) return;
+    const ok = await copyText(report.markdown);
+    if (ok) {
+      setCopied(true);
+      toast("Copied report to clipboard");
+      if (copyTimeoutRef.current !== null) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = window.setTimeout(() => {
+        setCopied(false);
+        copyTimeoutRef.current = null;
+      }, 2000);
+    } else {
+      toast("Could not copy to the clipboard", "danger");
+    }
+  };
 
   return (
     <>
@@ -74,7 +105,22 @@ export function ReportBody({ report }: { report: Report }) {
       ) : null}
 
       <section className="report-section" aria-labelledby="report-details">
-        <h2 id="report-details" className="report-section-title">Full report</h2>
+        <div className="report-section-header">
+          <h2 id="report-details" className="report-section-title">Full report</h2>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1.5 px-2 text-xs text-muted hover:text-ink"
+            onClick={handleCopy}
+            disabled={!report.markdown}
+            title={report.markdown ? "Copy report markdown" : "No report to copy"}
+            aria-label="Copy report markdown"
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+            <span className={copied ? "text-success" : ""}>{copied ? "Copied" : "Copy"}</span>
+          </Button>
+        </div>
         <article className="report-markdown">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}

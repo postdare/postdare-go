@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 
 import { getPublicReport, getReport } from "../api/postdareGo";
 import { Badge } from "../components/ui/badge";
+import { Toaster } from "../components/ui/toast";
 import { ReportBody, reportTypeLabel } from "../components/ReportView";
 import { shortCommit } from "../lib/utils";
 import { useAuthStore } from "../store/auth";
@@ -101,6 +102,7 @@ export function ReportPage() {
       <div className="report-content">
         <ReportBody report={data} />
       </div>
+      <Toaster />
     </main>
   );
 }
